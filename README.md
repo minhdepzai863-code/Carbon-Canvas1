@@ -2,6 +2,14 @@
 
 An interactive organic chemistry learning app with molecular visualization, two-reactant product prediction, mechanism tutoring, quizzes, active-recall flashcards, and links to source-backed scientific workflows.
 
+## Authentication backend and expanded practice
+
+The independent Node/PostgreSQL backend is in `backend/`. See [setup, security and integration instructions](backend/README.md). Better Auth provides email/password registration, verification, reset, fixed-expiry database sessions and protected study-data APIs. Supabase Postgres setup is prepared, but no cloud project or SMTP service is configured yet. No authentication UI was added.
+
+Practice now uses a local deterministic answer-key bank rather than generating every quiz with AI. Source filters distinguish original recall questions from seven licensed MIT 5.111 paper adaptations; external Cambridge/IB/PapaCambridge/IB Docs/Revision Village papers remain links, not a copied archive. Sources were checked in October 2026; this is not a complete question bank through 2026. MIT adaptations require compatible noncommercial use and carry [CC BY-NC-SA attribution](content/OPEN_CONTENT_LICENSE.md).
+
+All 88 modules now have 8–13 original explanatory cards, with more teaching detail and some worked examples. Flashcards support search, round size, review filtering, custom cards and persistent browser recall state. Theme, stylesheet and page layout are unchanged. Guest data stays local; authenticated cloud synchronization requires wiring the documented APIs to an existing login flow after provisioning. Protected API practice grades are server-computed; local guest scores are not tamper-proof official examination grades.
+
 ## Run locally
 
 1. Install Node.js 20.19 or newer.

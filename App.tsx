@@ -42,6 +42,7 @@ import {
   type CourseId,
 } from "./content/curriculum";
 import { getReference } from "./content/molecules";
+import { drawPracticeSet, paperSources } from "./content/questionBank";
 import { normalizeMolecule } from "./services/chemistry";
 import * as gemini from "./services/geminiService";
 import MoleculeVisualizer from "./components/MoleculeVisualizer";
@@ -306,6 +307,13 @@ export default function App() {
   const [mechLoading, setMechLoading] = useState(false);
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
+  const [practiceCount, setPracticeCount] = useState(10);
+  const [practiceSource, setPracticeSource] = useState<
+    "mixed" | "past-paper" | "original"
+  >(courseId === "UNDERGRAD" ? "past-paper" : "original");
+  const [includeOpenPapers, setIncludeOpenPapers] = useState(
+    import.meta.env.DEV || import.meta.env.VITE_NONCOMMERCIAL_OCW === "true",
+  );
   const [quizIndex, setQuizIndex] = useState(0);
   const [answer, setAnswer] = useState<string | null>(null);
   const [score, setScore] = useState(0);
@@ -384,6 +392,7 @@ export default function App() {
   };
   const chooseCourse = (id: CourseId) => {
     setCourseId(id);
+    setPracticeSource(id === "UNDERGRAD" ? "past-paper" : "original");
     selectModule(COURSES[id].modules[0].id);
     setStudyTab("notes");
     setQuery("");
@@ -471,18 +480,18 @@ export default function App() {
     setQuizIndex(0);
     setQuizModule(selected.id);
     try {
-      const result = await gemini.generateQuiz(
-        selected.title,
-        course.name +
-          " " +
-          course.version +
-          ". " +
-          selected.level +
-          ". Notes: " +
-          JSON.stringify(guide.keyPoints),
-      );
+      const result = {
+        topic: selected.title,
+        questions: drawPracticeSet(
+          courseId,
+          selected.id,
+          practiceCount,
+          includeOpenPapers,
+          practiceSource,
+        ),
+      };
       if (
-        result.questions.length !== 5 ||
+        result.questions.length === 0 ||
         result.questions.some(
           (q) =>
             q.type !== "mcq" ||
@@ -491,7 +500,7 @@ export default function App() {
         )
       )
         throw new Error(
-          "The generated question set is inconsistent. Generate a new set.",
+          "No licensed past-paper items are included for this module. Choose Original recall bank or use the linked paper and markscheme. For MIT adaptations, also enable noncommercial study.",
         );
       if (request === quizRequest.current) setQuiz(result);
     } catch (err) {
@@ -952,6 +961,8 @@ export default function App() {
                     )}
                     {studyTab === "recall" && (
                       <Flashcards
+                        key={selected.id}
+                        storageKey={selected.id}
                         cards={guide.flashcards}
                         topic={selected.title}
                       />
@@ -1363,17 +1374,80 @@ export default function App() {
                     </select>
                   </label>
                   <p className="fine-print">
-                    AI-generated practice, not official examination questions.
-                    Scores are stored locally.
+                    Answer-key grading. Original recall questions and labelled
+                    open-paper adaptations; not a complete official bank through
+                    2026. Guest scores are stored in this browser.
                   </p>
+                  <label>
+                    Questions per set
+                    <select
+                      value={practiceCount}
+                      disabled={!!quiz && !quizDone}
+                      onChange={(e) => setPracticeCount(Number(e.target.value))}
+                    >
+                      {[5, 10, 20, 40].map((n) => (
+                        <option key={n} value={n}>
+                          {n} (up to available bank size)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Question source
+                    <select
+                      value={practiceSource}
+                      disabled={!!quiz && !quizDone}
+                      onChange={(e) =>
+                        setPracticeSource(
+                          e.target.value as "mixed" | "past-paper" | "original",
+                        )
+                      }
+                    >
+                      <option value="original">Original recall bank</option>
+                      <option value="past-paper">
+                        Licensed past-paper adaptations only
+                      </option>
+                      <option value="mixed">
+                        Original &amp; licensed items
+                      </option>
+                    </select>
+                  </label>
+                  {courseId === "UNDERGRAD" && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={includeOpenPapers}
+                        disabled={!!quiz && !quizDone}
+                        onChange={(e) => setIncludeOpenPapers(e.target.checked)}
+                      />{" "}
+                      Include MIT open-paper adaptations for noncommercial study
+                      (CC BY-NC-SA)
+                    </label>
+                  )}
+                  <details>
+                    <summary>
+                      Past papers &amp; markschemes through 2026
+                    </summary>
+                    <p className="fine-print">
+                      Catalogue links, not a claim that all 2026 papers are
+                      available. External papers can be marked against their
+                      linked schemes; protected paper text is not copied here.
+                    </p>
+                    <SourceList
+                      sources={paperSources.filter(
+                        (s) => s.course === courseId,
+                      )}
+                    />
+                  </details>
                 </aside>
                 <section className="quiz-panel">
                   {!quiz ? (
                     <div className="empty-state">
                       <h2>Make the ideas stick</h2>
                       <p>
-                        Generate five multiple-choice questions based on this
-                        module’s notes.
+                        Draw a set from the module bank. Answers are checked
+                        against a fixed key, with explanations and paper
+                        provenance where applicable.
                       </p>
                       <Button
                         onClick={() => void startQuiz()}
@@ -1384,7 +1458,7 @@ export default function App() {
                         ) : (
                           <Pencil size={17} />
                         )}{" "}
-                        Generate practice set
+                        Start practice set
                       </Button>
                     </div>
                   ) : quizDone ? (
@@ -1423,6 +1497,23 @@ export default function App() {
                         aria-label="Question progress"
                       />
                       <h2>{quiz.questions[quizIndex].question}</h2>
+                      {quiz.questions[quizIndex].source && (
+                        <p className="fine-print">
+                          <a
+                            href={quiz.questions[quizIndex].source!.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {quiz.questions[quizIndex].source!.title}
+                          </a>{" "}
+                          ·{" "}
+                          {quiz.questions[quizIndex].source!.kind ===
+                          "adapted-past-paper"
+                            ? "Adapted past-paper item"
+                            : "Original recall item"}{" "}
+                          · {quiz.questions[quizIndex].source!.license}
+                        </p>
+                      )}
                       <div className="quiz-options">
                         {quiz.questions[quizIndex].options?.map((option, i) => (
                           <button
@@ -1459,6 +1550,11 @@ export default function App() {
                               : "Review this idea"}
                           </h3>
                           <p>{quiz.questions[quizIndex].explanation}</p>
+                          {quiz.questions[quizIndex].source?.attribution && (
+                            <p className="fine-print">
+                              {quiz.questions[quizIndex].source!.attribution}
+                            </p>
+                          )}
                           <p>
                             Answer: {quiz.questions[quizIndex].correctAnswer}
                           </p>

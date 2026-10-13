@@ -1,4 +1,5 @@
 import type { Flashcard, Module, StudyGuide, VideoResource } from "../types";
+import { extraCards } from "./studyDetails.ts";
 
 export type CourseId = "ALEVEL" | "IB" | "UNDERGRAD";
 export const REVIEW_DATE = "14 October 2026";
@@ -1422,12 +1423,16 @@ export const COURSES: Record<
 };
 export function getStudyGuide(module: Module, course: CourseId): StudyGuide {
   const item = SCOPED[module.id] || LESSONS[module.lessonKey || "bonding"];
+  const cards = [
+    ...item.cards.map((card, i) => ({ ...card, id: `${module.id}:core:${i}` })),
+    ...extraCards(module.lessonKey || "bonding", module.id),
+  ];
   return {
     topic: module.title,
     summary: item.summary,
-    keyPoints: item.cards.map((c) => c.definition),
+    keyPoints: cards.map((c) => c.definition),
     commonMistakes: item.mistakes,
     resources: [...item.sources, ...COURSES[course].sources],
-    flashcards: item.cards,
+    flashcards: cards,
   };
 }

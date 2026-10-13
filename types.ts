@@ -55,6 +55,16 @@ export interface ArchiveItem {
 }
 
 export interface QuizQuestion {
+  bankId?: string;
+  source?: {
+    title: string;
+    url: string;
+    kind: "original" | "adapted-past-paper";
+    year?: number;
+    reference?: string;
+    license: string;
+    attribution?: string;
+  };
   id: number;
   type: "mcq" | "fitb" | "short_answer";
   question: string;
@@ -96,6 +106,7 @@ export interface StudyGuide {
 }
 
 export interface Flashcard {
+  id?: string;
   term: string;
   definition: string;
   hint?: string;
