@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Atom, Beaker, BookOpen, BrainCircuit, Menu, MessageCircle, X, 
-  Award, ArrowRight, Zap, Search, Save, Archive, FlaskConical, CheckCircle, Lock, Play, GraduationCap, ChevronDown, ChevronUp, Thermometer, Palette, Moon, Sun, Gauge, Flame, Droplets, Video, ExternalLink, Book, FileText, Library, Loader2, AlertTriangle, Trash2, Eye
+  Award, ArrowRight, Zap, Search, Save, Archive, FlaskConical, CheckCircle, Lock, Play, GraduationCap, ChevronDown, ChevronUp, Thermometer, Palette, Moon, Gauge, Flame, Droplets, Video, ExternalLink, Book, Library, Loader2, AlertTriangle, Trash2, Eye, Combine, Github, ShieldAlert
 } from 'lucide-react';
-import { AppView, MoleculeData, QuizData, ReactionData, ArchiveItem, Module, UserStats, StudyGuide } from './types';
+import { AppView, MoleculeData, QuizData, ReactionData, ReactionSimulation, ArchiveItem, Module, UserStats, StudyGuide } from './types';
 import * as gemini from './services/geminiService';
 import MoleculeVisualizer from './components/MoleculeVisualizer';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import Flashcards from './components/Flashcards';
+import { SCIENCE_SKILLS } from './scienceSkills';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // --- Helper Components ---
 
@@ -118,7 +120,7 @@ const CURRICULA: Record<string, Module[]> = {
 
 const App = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
   const [currentTheme, setCurrentTheme] = useState<ThemeId>('default');
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
@@ -158,6 +160,12 @@ const App = () => {
   const [reactionInput, setReactionInput] = useState("SN2 reaction of methyl bromide with hydroxide");
   const [reactionData, setReactionData] = useState<ReactionData | null>(null);
   const [loadingReaction, setLoadingReaction] = useState(false);
+
+  // Two-reactant simulation state
+  const [reactantA, setReactantA] = useState('ethanoic acid');
+  const [reactantB, setReactantB] = useState('ethanol');
+  const [simulation, setSimulation] = useState<ReactionSimulation | null>(null);
+  const [simulationLoading, setSimulationLoading] = useState(false);
 
   // Quiz State
   const [quizTopic, setQuizTopic] = useState("Stereochemistry");
@@ -311,6 +319,27 @@ const App = () => {
     }
   }
 
+  const handleReactionSimulation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reactantA.trim() || !reactantB.trim()) return;
+    setSimulationLoading(true);
+    setSimulation(null);
+    try {
+      const result = await gemini.predictReaction(reactantA, reactantB, {
+        temp: reactionTemp,
+        pressure: reactionPressure,
+        catalyst: reactionCatalyst,
+        solvent: reactionSolvent,
+      });
+      setSimulation(result);
+      setUserStats((previous) => ({ ...previous, reactionsMastered: previous.reactionsMastered + 1 }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not predict this reaction.');
+    } finally {
+      setSimulationLoading(false);
+    }
+  };
+
   const startQuiz = async (topic?: string, moduleId?: string) => {
     const targetTopic = topic || quizTopic;
     setLoadingQuiz(true);
@@ -333,16 +362,12 @@ const App = () => {
 
   const handleQuizAnswerMCQ = (optionIdx: number) => {
     if (showExplanation) return;
+    const question = quizData?.questions[currentQuestionIdx];
+    const option = question?.options?.[optionIdx];
+    if (!question || option === undefined) return;
     setSelectedOption(optionIdx);
     setShowExplanation(true);
-    // MCQ Check
-    if (quizData?.questions[currentQuestionIdx].options && 
-        quizData.questions[currentQuestionIdx].options![optionIdx] === quizData.questions[currentQuestionIdx].correctAnswer) {
-        setQuizScore(s => s + 1);
-    } else if (quizData?.questions[currentQuestionIdx].options![optionIdx] === quizData.questions[currentQuestionIdx].correctAnswer) {
-       // Fallback if correctAnswer matches string
-       setQuizScore(s => s + 1);
-    }
+    if (option === question.correctAnswer) setQuizScore((score) => score + 1);
   };
 
   const handleQuizAnswerText = (e: React.FormEvent) => {
@@ -704,6 +729,8 @@ const App = () => {
                                      </ul>
                                  </div>
                                  
+                                 <Flashcards cards={studyGuide.flashcards} topic={activeModule.topic} />
+
                                  <div>
                                      <h3 className="font-bold text-skin-main mb-3 flex items-center gap-2"><Library size={18} className="text-blue-500"/> Resources</h3>
                                      <div className="grid gap-3">
@@ -737,7 +764,7 @@ const App = () => {
     <div className="flex h-screen w-full bg-skin-base text-skin-main font-sans overflow-hidden transition-colors duration-500">
       
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-skin-sidebar-bg border-r border-skin-border flex flex-col transition-all duration-300 relative z-20 shadow-xl`}>
+      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-skin-sidebar-bg border-r border-skin-border flex flex-col transition-all duration-300 relative z-20 shadow-xl overflow-hidden shrink-0`}>
         <div className="p-4 flex items-center justify-between border-b border-white/10">
           {sidebarOpen && (
               <div className="flex items-center gap-2 animate-fade-in">
@@ -745,7 +772,7 @@ const App = () => {
                   <span className="font-bold text-lg text-white tracking-tight">CarbonCanvas</span>
               </div>
           )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-skin-sidebar-text hover:bg-white/10 rounded-lg transition-colors">
+          <button aria-label={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'} onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-skin-sidebar-text hover:bg-white/10 rounded-lg transition-colors">
             <Menu size={20} />
           </button>
         </div>
@@ -756,8 +783,9 @@ const App = () => {
           <NavItem view={AppView.MOLECULE_VIEWER} current={view} icon={Search} label="Molecule Lab" onClick={setView} delay={150} />
           <NavItem view={AppView.QUIZ_ARENA} current={view} icon={Zap} label="Quiz Arena" onClick={setView} delay={200} />
           <NavItem view={AppView.REACTION_TUTOR} current={view} icon={Beaker} label="Reaction Tutor" onClick={setView} delay={250} />
-          <NavItem view={AppView.STUDY_HUB} current={view} icon={Library} label="Study Hub" onClick={setView} delay={300} />
-          <NavItem view={AppView.CHAT_TUTOR} current={view} icon={MessageCircle} label="AI Tutor" onClick={setView} delay={350} />
+          <NavItem view={AppView.REACTION_SIMULATOR} current={view} icon={Combine} label="Reaction Simulator" onClick={setView} delay={300} />
+          <NavItem view={AppView.STUDY_HUB} current={view} icon={Library} label="Study Hub" onClick={setView} delay={350} />
+          <NavItem view={AppView.CHAT_TUTOR} current={view} icon={MessageCircle} label="AI Tutor" onClick={setView} delay={400} />
         </nav>
 
         {/* Theme Selector */}
@@ -1031,6 +1059,69 @@ const App = () => {
              </div>
           )}
 
+          {view === AppView.REACTION_SIMULATOR && (
+            <div className="h-full overflow-y-auto p-5 md:p-8 animate-fade-in">
+              <div className="mx-auto max-w-7xl">
+                <div className="mb-8">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-skin-primary-light px-3 py-1 text-xs font-bold uppercase tracking-widest text-skin-primary">
+                    <Combine size={14} /> Gemini reaction prediction
+                  </div>
+                  <h2 className="text-3xl font-bold text-skin-main">Two-reactant simulator</h2>
+                  <p className="mt-2 max-w-2xl text-skin-muted">Combine names, formulas, or SMILES and inspect the predicted major product. Results are educational hypotheses, not laboratory procedures.</p>
+                </div>
+
+                <form onSubmit={handleReactionSimulation} className="mb-7 rounded-2xl border border-skin-border bg-skin-surface p-5 shadow-sm md:p-6">
+                  <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-end">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-bold text-skin-main">Reactant A</span>
+                      <input value={reactantA} onChange={(event) => setReactantA(event.target.value)} placeholder="e.g. ethanoic acid" className="w-full rounded-xl border border-skin-border bg-skin-base px-4 py-3 text-skin-main outline-none focus:ring-2 focus:ring-skin-primary" />
+                    </label>
+                    <div className="hidden h-12 w-12 items-center justify-center rounded-full bg-skin-primary-light text-skin-primary md:flex"><Combine size={22} /></div>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-bold text-skin-main">Reactant B</span>
+                      <input value={reactantB} onChange={(event) => setReactantB(event.target.value)} placeholder="e.g. ethanol" className="w-full rounded-xl border border-skin-border bg-skin-base px-4 py-3 text-skin-main outline-none focus:ring-2 focus:ring-skin-primary" />
+                    </label>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="text-sm font-semibold text-skin-muted">Temperature (°C)<input type="number" value={reactionTemp} onChange={(event) => setReactionTemp(Number(event.target.value))} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
+                    <label className="text-sm font-semibold text-skin-muted">Pressure (atm)<input type="number" min="0" step="0.1" value={reactionPressure} onChange={(event) => setReactionPressure(Number(event.target.value))} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
+                    <label className="text-sm font-semibold text-skin-muted">Catalyst<input value={reactionCatalyst} onChange={(event) => setReactionCatalyst(event.target.value)} placeholder="optional" className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
+                    <label className="text-sm font-semibold text-skin-muted">Solvent<input value={reactionSolvent} onChange={(event) => setReactionSolvent(event.target.value)} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
+                  </div>
+
+                  <button type="submit" disabled={simulationLoading || !reactantA.trim() || !reactantB.trim()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-skin-primary px-6 py-3 font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+                    {simulationLoading ? <Loader2 className="animate-spin" size={19} /> : <Combine size={19} />}
+                    {simulationLoading ? 'Predicting product…' : 'Predict major product'}
+                  </button>
+                </form>
+
+                {simulation && (
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)] animate-slide-up">
+                    <div className="min-h-[520px] overflow-hidden rounded-2xl border border-skin-border bg-skin-sidebar-bg shadow-xl">
+                      <MoleculeVisualizer data={simulation.product} loading={false} />
+                    </div>
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-skin-border bg-skin-surface p-6 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div><p className="text-xs font-bold uppercase tracking-widest text-skin-muted">Predicted product</p><h3 className="mt-1 text-2xl font-bold text-skin-main">{simulation.product.name}</h3></div>
+                          <span className="rounded-full bg-skin-primary-light px-3 py-1 text-xs font-bold uppercase text-skin-primary">{simulation.confidence} confidence</span>
+                        </div>
+                        <p className="mt-4 rounded-xl bg-skin-base p-4 font-mono text-sm text-skin-main">{simulation.equation}</p>
+                        <p className="mt-4 text-sm font-bold text-skin-primary">{simulation.reactionType}</p>
+                        <p className="mt-2 leading-relaxed text-skin-muted">{simulation.explanation}</p>
+                      </div>
+                      <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+                        <ShieldAlert className="mt-0.5 shrink-0" size={22} />
+                        <div><h4 className="font-bold">Safety check</h4><p className="mt-1 text-sm leading-relaxed">{simulation.safetyNote}</p></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {view === AppView.STUDY_HUB && (
               <div className="p-8 h-full overflow-y-auto animate-fade-in">
                   <div className="flex justify-between items-end mb-8">
@@ -1059,6 +1150,28 @@ const App = () => {
                           </div>
                       ))}
                   </div>
+
+                  <section className="mt-10 rounded-2xl border border-skin-border bg-skin-surface p-6 shadow-sm">
+                    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-skin-primary">Connected research workflows</p>
+                        <h3 className="mt-1 text-2xl font-bold text-skin-main">DeepMind Science Skills</h3>
+                        <p className="mt-2 max-w-3xl text-sm text-skin-muted">Open source-backed workflows for compound verification, bioactivity research, structure lookup, and molecular visualization.</p>
+                      </div>
+                      <a href="https://github.com/google-deepmind/science-skills" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-skin-primary hover:underline"><Github size={17} /> View repository</a>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {SCIENCE_SKILLS.map((skill) => (
+                        <a key={skill.name} href={skill.href} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-skin-border bg-skin-base transition hover:-translate-y-1 hover:border-skin-primary hover:shadow-lg">
+                          <div className={`h-1.5 bg-gradient-to-r ${skill.accent}`} />
+                          <div className="p-4">
+                            <div className="flex items-center justify-between gap-2"><h4 className="font-bold text-skin-main">{skill.name}</h4><ExternalLink size={16} className="text-skin-muted group-hover:text-skin-primary" /></div>
+                            <p className="mt-2 text-sm leading-relaxed text-skin-muted">{skill.description}</p>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </section>
 
                   {selectedStudyModule && (
                       <div className="fixed inset-0 z-50 flex justify-end">
@@ -1101,6 +1214,8 @@ const App = () => {
                                                 </ul>
                                             </div>
                                        </div>
+
+                                       <Flashcards cards={studyGuide.flashcards} topic={selectedStudyModule.topic} />
 
                                        <div>
                                            <h3 className="text-xl font-bold text-skin-main mb-4">Curated Resources</h3>

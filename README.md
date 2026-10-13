@@ -1,20 +1,20 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# CarbonCanvas
 
-# Run and deploy your AI Studio app
+An interactive organic chemistry learning app with molecular visualization, two-reactant product prediction, mechanism tutoring, quizzes, active-recall flashcards, and links to source-backed scientific workflows.
 
-This contains everything you need to run your app locally.
+## Run locally
 
-View your app in AI Studio: https://ai.studio/apps/drive/1RX-xqQs9pdtogeNcoiXJU8OPZTbkGiYy
+1. Install Node.js 20.19 or newer.
+2. Run `npm install`.
+3. Copy `.env.example` to `.env.local` and add a Gemini API key from Google AI Studio.
+4. Run `npm run dev`.
 
-## Run Locally
+The app uses the current `@google/genai` SDK and defaults to `gemini-3.8-flash`. Set `VITE_GEMINI_MODEL` to override it.
 
-**Prerequisites:**  Node.js
+## Security
 
+`VITE_` variables are bundled into browser code. For a public deployment, proxy Gemini requests through a server-side endpoint and keep the production API key there. Never commit `.env.local`.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Science Skills
+
+Study Hub links to relevant workflows from [google-deepmind/science-skills](https://github.com/google-deepmind/science-skills), including PubChem, ChEMBL, PDB, and PyMOL. Those links expose the source instructions; this browser app does not execute repository scripts locally.

@@ -3,6 +3,7 @@ export enum AppView {
   DASHBOARD = 'DASHBOARD',
   MOLECULE_VIEWER = 'MOLECULE_VIEWER',
   REACTION_TUTOR = 'REACTION_TUTOR',
+  REACTION_SIMULATOR = 'REACTION_SIMULATOR',
   QUIZ_ARENA = 'QUIZ_ARENA',
   CHAT_TUTOR = 'CHAT_TUTOR',
   ARCHIVE = 'ARCHIVE',
@@ -85,6 +86,22 @@ export interface StudyGuide {
   keyPoints: string[];
   commonMistakes: string[];
   resources: VideoResource[];
+  flashcards: Flashcard[];
+}
+
+export interface Flashcard {
+  term: string;
+  definition: string;
+  hint?: string;
+}
+
+export interface ReactionSimulation {
+  equation: string;
+  reactionType: string;
+  confidence: 'high' | 'medium' | 'low';
+  explanation: string;
+  safetyNote: string;
+  product: MoleculeData;
 }
 
 export interface ChatMessage {
