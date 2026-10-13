@@ -1,1260 +1,1653 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Atom, Beaker, BookOpen, BrainCircuit, Menu, MessageCircle, X, 
-  Award, ArrowRight, Zap, Search, Save, Archive, FlaskConical, CheckCircle, Lock, Play, GraduationCap, ChevronDown, ChevronUp, Thermometer, Palette, Moon, Gauge, Flame, Droplets, Video, ExternalLink, Book, Library, Loader2, AlertTriangle, Trash2, Eye, Combine, Github, ShieldAlert
-} from 'lucide-react';
-import { AppView, MoleculeData, QuizData, ReactionData, ReactionSimulation, ArchiveItem, Module, UserStats, StudyGuide } from './types';
-import * as gemini from './services/geminiService';
-import MoleculeVisualizer from './components/MoleculeVisualizer';
-import Flashcards from './components/Flashcards';
-import { SCIENCE_SKILLS } from './scienceSkills';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  Atom,
+  BookOpen,
+  FlaskConical,
+  Combine,
+  MessageCircle,
+  Archive,
+  ArrowRight,
+  Menu,
+  X,
+  Check,
+  ChevronRight,
+  ExternalLink,
+  Loader2,
+  Search,
+  Bookmark,
+  Sun,
+  Moon,
+  Layers,
+  GraduationCap,
+  Beaker,
+  Plus,
+  Library,
+  Trash2,
+  Pencil,
+  AlertCircle,
+} from "lucide-react";
+import {
+  AppView,
+  type MoleculeData,
+  type ArchiveItem,
+  type Module,
+  type QuizData,
+  type ReactionData,
+  type ReactionSimulation,
+} from "./types";
+import {
+  COURSES,
+  getStudyGuide,
+  REVIEW_DATE,
+  type CourseId,
+} from "./content/curriculum";
+import { getReference } from "./content/molecules";
+import { normalizeMolecule } from "./services/chemistry";
+import * as gemini from "./services/geminiService";
+import MoleculeVisualizer from "./components/MoleculeVisualizer";
+import Flashcards from "./components/Flashcards";
+import SourceList from "./components/SourceList";
+import { SCIENCE_SKILLS } from "./scienceSkills";
 
-// --- Helper Components ---
-
-const NavItem = ({ view, current, icon: Icon, label, onClick, delay }: any) => (
-  <button
-    onClick={() => onClick(view)}
-    className={`flex items-center gap-3 px-4 py-3 w-full text-left rounded-lg transition-all duration-300 group relative overflow-hidden ${
-      current === view 
-        ? 'bg-skin-primary text-white shadow-lg shadow-skin-primary/20' 
-        : 'text-skin-sidebar-text hover:bg-white/10 hover:text-white'
-    } animate-slide-up`}
-    style={{ animationDelay: `${delay}ms` }}
-  >
-    <div className={`absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-300 ${current === view ? 'hidden' : ''}`} />
-    <Icon size={20} className={`transition-transform duration-300 ${current === view ? 'scale-110' : 'group-hover:scale-110'}`} />
-    <span className="font-medium z-10">{label}</span>
-  </button>
-);
-
-const DashboardCard = ({ title, value, subtitle, icon: Icon, colorClass, delay }: any) => (
-  <div 
-    className={`bg-skin-surface border border-skin-border p-6 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 animate-enter`}
-    style={{ animationDelay: `${delay}ms` }}
-  >
-    <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${colorClass}`}>
-      <Icon className="text-white" size={24} />
+const NAV = [
+  { view: AppView.DASHBOARD, label: "Workspace", icon: Layers },
+  { view: AppView.STUDY_HUB, label: "Study hub", icon: BookOpen },
+  { view: AppView.MOLECULE_VIEWER, label: "Molecule lab", icon: Atom },
+  {
+    view: AppView.REACTION_SIMULATOR,
+    label: "Reaction simulator",
+    icon: Combine,
+  },
+  { view: AppView.REACTION_TUTOR, label: "Mechanism tutor", icon: Beaker },
+  {
+    view: AppView.QUIZ_ARENA,
+    label: "Practice questions",
+    icon: GraduationCap,
+  },
+  { view: AppView.CHAT_TUTOR, label: "Ask a tutor", icon: MessageCircle },
+  { view: AppView.ARCHIVE, label: "Saved structures", icon: Archive },
+];
+interface Progress {
+  completed: string[];
+  scores: Record<string, number>;
+  quizzes: number;
+  total: number;
+}
+const blankProgress: Progress = {
+  completed: [],
+  scores: {},
+  quizzes: 0,
+  total: 0,
+};
+function readSaved<T>(key: string, fallback: T): T {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function Button({
+  children,
+  onClick,
+  secondary = false,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  secondary?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={"button" + (secondary ? " secondary" : "")}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+function PageHeading({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="page-heading">
+      <div>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {children}
     </div>
-    <h3 className="text-3xl font-bold text-skin-main">{value}</h3>
-    <p className="text-skin-main font-medium mt-1 opacity-90">{title}</p>
-    <p className="text-skin-muted text-sm mt-1">{subtitle}</p>
-  </div>
-);
-
-// --- Theme Configuration ---
-type ThemeId = 'default' | 'emerald' | 'purple' | 'dark';
-
-interface ThemeConfig {
-  id: ThemeId;
-  name: string;
-  icon: any;
-  color: string;
+  );
+}
+function Conditions({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: gemini.ReactionConditions;
+  onChange: (v: gemini.ReactionConditions) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset className="conditions" disabled={disabled}>
+      <legend>Reaction conditions</legend>
+      <label>
+        Temperature (°C)
+        <input
+          type="number"
+          value={value.temp}
+          required
+          min={-273.15}
+          step="any"
+          onChange={(e) => onChange({ ...value, temp: e.target.valueAsNumber })}
+        />
+      </label>
+      <label>
+        Pressure (atm)
+        <input
+          type="number"
+          value={value.pressure}
+          required
+          min={0.0001}
+          step="any"
+          onChange={(e) =>
+            onChange({ ...value, pressure: e.target.valueAsNumber })
+          }
+        />
+      </label>
+      <label>
+        Solvent
+        <input
+          value={value.solvent}
+          onChange={(e) => onChange({ ...value, solvent: e.target.value })}
+          placeholder="Not specified"
+        />
+      </label>
+      <label>
+        Catalyst
+        <input
+          value={value.catalyst}
+          onChange={(e) => onChange({ ...value, catalyst: e.target.value })}
+          placeholder="None specified"
+        />
+      </label>
+    </fieldset>
+  );
+}
+function MoleculeFacts({ data }: { data: MoleculeData }) {
+  return (
+    <aside className="molecule-facts">
+      <div className="section-heading">
+        <h2>{data.name}</h2>
+        <span className="tag">
+          {data.provenance === "reference"
+            ? "Reference example"
+            : data.provenance === "user"
+              ? "Your structure"
+              : "AI prediction"}
+        </span>
+      </div>
+      <p>{data.description}</p>
+      {data.formula && (
+        <dl className="facts-row">
+          <div>
+            <dt>Formula</dt>
+            <dd className="formula">{data.formula}</dd>
+          </div>
+          <div>
+            <dt>Heavy atoms</dt>
+            <dd>{data.atoms.filter((a) => a.element !== "H").length}</dd>
+          </div>
+        </dl>
+      )}
+      <div className="graph-check">
+        <Check size={16} />
+        <span>Graph passes valence and aromaticity checks</span>
+      </div>
+      {data.geometry ? (
+        <div className="geometry-note">
+          <h3>Molecular geometry</h3>
+          <strong>{data.geometry.shape}</strong>
+          <div className="angle-value">{data.geometry.angle}</div>
+          <p>{data.geometry.note}</p>
+          <a
+            href={data.geometry.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Geometry source <ExternalLink size={13} />
+          </a>
+        </div>
+      ) : (
+        <p className="fine-print">
+          No measured 3D geometry is assigned. A valid molecular graph does not
+          establish stability or reaction feasibility.
+        </p>
+      )}
+      {data.sourceUrl && (
+        <a
+          className="text-link"
+          href={data.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Read the reference <ExternalLink size={14} />
+        </a>
+      )}
+      <details className="structure-details">
+        <summary>Structure notation and charges</summary>
+        <code>{data.smiles || "Graph representation"}</code>
+        <p>
+          {data.atoms
+            .filter((a) => a.formalCharge)
+            .map(
+              (a) =>
+                a.element +
+                ": " +
+                ((a.formalCharge || 0) > 0 ? "+" : "") +
+                a.formalCharge,
+            )
+            .join(", ") || "No nonzero formal charges in this representation."}
+        </p>
+      </details>
+    </aside>
+  );
 }
 
-const THEMES: ThemeConfig[] = [
-  { id: 'default', name: 'Scientific Blue', icon: Atom, color: 'bg-blue-600' },
-  { id: 'emerald', name: 'Bio Emerald', icon: FlaskConical, color: 'bg-emerald-600' },
-  { id: 'purple', name: 'Noble Purple', icon: Award, color: 'bg-violet-600' },
-  { id: 'dark', name: 'Night Mode', icon: Moon, color: 'bg-slate-800' },
-];
-
-const CURRICULA: Record<string, Module[]> = {
-  UNDERGRAD: [
-    { id: 'u1', title: 'Structure & Bonding', description: 'Lewis structures, hybridization, and molecular geometry.', status: 'active', topic: 'Chemical Bonding' },
-    { id: 'u2', title: 'Acids and Bases', description: 'pKa, resonance effects, and Lewis acid-base theory.', status: 'locked', topic: 'Acids and Bases' },
-    { id: 'u3', title: 'Alkanes & Nomenclature', description: 'IUPAC naming, conformational analysis (Newman projections).', status: 'locked', topic: 'Alkanes' },
-    { id: 'u4', title: 'Stereochemistry', description: 'Chirality, enantiomers, diastereomers, and R/S configuration.', status: 'locked', topic: 'Stereochemistry' },
-    { id: 'u5', title: 'Nucleophilic Substitution', description: 'SN1 and SN2 mechanisms, kinetics, and stereochemical outcomes.', status: 'locked', topic: 'Nucleophilic Substitution' },
-    { id: 'u6', title: 'Elimination Reactions', description: 'E1 and E2 mechanisms, Zaitsev vs Hofmann products.', status: 'locked', topic: 'Elimination Reactions' },
-    { id: 'u7', title: 'Alkenes: Reactions', description: 'Electrophilic addition, hydration, and oxidation.', status: 'locked', topic: 'Alkenes' },
-    { id: 'u8', title: 'Alkynes', description: 'Synthesis and reactions of alkynes.', status: 'locked', topic: 'Alkynes' },
-    { id: 'u9', title: 'Alcohols and Ethers', description: 'Synthesis, oxidation, and protection groups.', status: 'locked', topic: 'Alcohols' },
-    { id: 'u10', title: 'Spectroscopy (NMR/IR/MS)', description: 'Structure elucidation using spectral data.', status: 'locked', topic: 'Spectroscopy' },
-    { id: 'u11', title: 'Conjugated Systems', description: 'Dienes, UV-Vis, and molecular orbital theory.', status: 'locked', topic: 'Conjugated Systems' },
-    { id: 'u12', title: 'Aromatic Compounds', description: 'Benzene, aromaticity (Hückel rule).', status: 'locked', topic: 'Aromaticity' },
-    { id: 'u13', title: 'Electrophilic Aromatic Subst.', description: 'Halogenation, nitration, sulfonation, Friedel-Crafts.', status: 'locked', topic: 'EAS' },
-    { id: 'u14', title: 'Aldehydes and Ketones', description: 'Nucleophilic addition reactions.', status: 'locked', topic: 'Carbonyls' },
-    { id: 'u15', title: 'Carboxylic Acids', description: 'Acidity, synthesis, and reactions.', status: 'locked', topic: 'Carboxylic Acids' },
-    { id: 'u16', title: 'Acid Derivatives', description: 'Esters, amides, anhydrides, and acid chlorides.', status: 'locked', topic: 'Acid Derivatives' },
-    { id: 'u17', title: 'Enols and Enolates', description: 'Alpha-carbon chemistry, aldol condensations.', status: 'locked', topic: 'Enolates' },
-    { id: 'u18', title: 'Amines', description: 'Basicity, synthesis, and reactions.', status: 'locked', topic: 'Amines' },
-  ],
-  ALEVEL: [
-    { id: 'a1', title: 'Atomic Structure', description: 'Protons, neutrons, electrons, and orbitals.', status: 'active', topic: 'Atomic Structure' },
-    { id: 'a2', title: 'Amount of Substance', description: 'Moles, empirical formulas, and stoichiometry.', status: 'locked', topic: 'Stoichiometry' },
-    { id: 'a3', title: 'Bonding', description: 'Ionic, covalent, metallic bonding and intermolecular forces.', status: 'locked', topic: 'Bonding' },
-    { id: 'a4', title: 'Intro to Organic Chem', description: 'Functional groups, IUPAC naming, isomerism.', status: 'locked', topic: 'Organic Basics' },
-    { id: 'a5', title: 'Alkanes', description: 'Fractional distillation, cracking, combustion, radical substitution.', status: 'locked', topic: 'Alkanes' },
-    { id: 'a6', title: 'Halogenoalkanes', description: 'Nucleophilic substitution, elimination, ozone layer.', status: 'locked', topic: 'Halogenoalkanes' },
-    { id: 'a7', title: 'Alkenes', description: 'Electrophilic addition, polymerization, stereoisomerism.', status: 'locked', topic: 'Alkenes' },
-    { id: 'a8', title: 'Alcohols', description: 'Production, oxidation, elimination to alkenes.', status: 'locked', topic: 'Alcohols' },
-    { id: 'a9', title: 'Organic Analysis', description: 'Mass spec (fragmentation), IR spec.', status: 'locked', topic: 'Spectroscopy' },
-    { id: 'a10', title: 'Thermodynamics', description: 'Enthalpy, Born-Haber cycles, entropy, Gibbs free energy.', status: 'locked', topic: 'Thermodynamics' },
-    { id: 'a11', title: 'Kinetics', description: 'Rate equations, orders of reaction, Arrhenius.', status: 'locked', topic: 'Kinetics' },
-    { id: 'a12', title: 'Equilibrium (Kp)', description: 'Gas phase equilibria and equilibrium constants.', status: 'locked', topic: 'Equilibrium' },
-    { id: 'a13', title: 'Aldehydes & Ketones', description: 'Carbonyl tests (Tollens/Fehlings), reduction, hydroxynitriles.', status: 'locked', topic: 'Carbonyls' },
-    { id: 'a14', title: 'Carboxylic Acids', description: 'Acidity, esters, triglycerides, acylation.', status: 'locked', topic: 'Carboxylic Acids' },
-    { id: 'a15', title: 'Aromatic Chemistry', description: 'Benzene structure, delocalization, electrophilic substitution.', status: 'locked', topic: 'Aromatics' },
-    { id: 'a16', title: 'Amines & Polymers', description: 'Basicity, nucleophilic reactions, polyamides/polyesters.', status: 'locked', topic: 'Amines' },
-    { id: 'a17', title: 'Amino Acids & DNA', description: 'Chirality, zwitterions, peptides, protein structure.', status: 'locked', topic: 'Biochemistry' },
-    { id: 'a18', title: 'NMR Synthesis', description: 'Proton and C13 NMR, chromatography, organic synthesis.', status: 'locked', topic: 'Advanced Analysis' },
-  ],
-  IB: [
-     { id: 'ib1', title: 'Stoichiometric Relationships', description: 'The mole concept, reacting masses and volumes.', status: 'active', topic: 'Stoichiometry' },
-     { id: 'ib2', title: 'Atomic Structure', description: 'Electron configuration, emission spectra.', status: 'locked', topic: 'Atomic Structure' },
-     { id: 'ib3', title: 'Periodicity', description: 'Periodic trends: radius, ionization energy, electronegativity.', status: 'locked', topic: 'Periodicity' },
-     { id: 'ib4', title: 'Chemical Bonding', description: 'Ionic, covalent, metallic, VSEPR theory.', status: 'locked', topic: 'Bonding' },
-     { id: 'ib5', title: 'Energetics/Thermochem', description: 'Enthalpy cycles, bond enthalpies, entropy (HL).', status: 'locked', topic: 'Energetics' },
-     { id: 'ib6', title: 'Chemical Kinetics', description: 'Collision theory, rates of reaction, mechanisms (HL).', status: 'locked', topic: 'Kinetics' },
-     { id: 'ib7', title: 'Equilibrium', description: 'Le Chatelier, equilibrium law, Gibb\'s energy (HL).', status: 'locked', topic: 'Equilibrium' },
-     { id: 'ib8', title: 'Acids and Bases', description: 'pH scale, strong/weak, buffers (HL), salt hydrolysis.', status: 'locked', topic: 'Acids and Bases' },
-     { id: 'ib9', title: 'Redox Processes', description: 'Oxidation states, voltaic/electrolytic cells.', status: 'locked', topic: 'Redox' },
-     { id: 'ib10', title: 'Organic Fundamentals', description: 'Homologous series, functional groups, naming.', status: 'locked', topic: 'Organic Basics' },
-     { id: 'ib11', title: 'Measurement & Data', description: 'Spectroscopic identification (IR, H-NMR, MS).', status: 'locked', topic: 'Spectroscopy' },
-     { id: 'ib12', title: 'Advanced Organic (HL)', description: 'Sn1/Sn2, E1/E2, retro-synthesis, stereoisomerism.', status: 'locked', topic: 'Advanced Organic' },
-     { id: 'ib13', title: 'Biochemistry (Option)', description: 'Proteins, lipids, carbohydrates, enzymes.', status: 'locked', topic: 'Biochemistry' },
-     { id: 'ib14', title: 'Medicinal Chem (Option)', description: 'Drug action, aspirin, penicillin, opiates.', status: 'locked', topic: 'Medicinal Chemistry' },
-  ]
-};
-
-const App = () => {
-  const [view, setView] = useState<AppView>(AppView.DASHBOARD);
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
-  const [currentTheme, setCurrentTheme] = useState<ThemeId>('default');
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-
-  // User Progress State
-  const [selectedSyllabus, setSelectedSyllabus] = useState('UNDERGRAD');
-  const [modules, setModules] = useState<Module[]>(CURRICULA.UNDERGRAD);
-  const [userStats, setUserStats] = useState<UserStats>({
-    quizzesTaken: 0,
-    totalScore: 0,
-    reactionsMastered: 0,
-    moleculesGenerated: 0
+export default function App() {
+  const [view, setView] = useState(AppView.DASHBOARD);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [courseId, setCourseId] = useState<CourseId>(() => {
+    const saved = readSaved<CourseId>("cc-course-v2", "ALEVEL");
+    return COURSES[saved] ? saved : "ALEVEL";
   });
-  const [archive, setArchive] = useState<ArchiveItem[]>([]);
-  const [expandedCurriculum, setExpandedCurriculum] = useState(false);
-
-  // Study Hub State
-  const [activeModule, setActiveModule] = useState<Module | null>(null); // Used for Dashboard panel
-  const [selectedStudyModule, setSelectedStudyModule] = useState<Module | null>(null); // Used for Main Study Hub View
-  const [studyGuide, setStudyGuide] = useState<StudyGuide | null>(null);
-  const [loadingStudy, setLoadingStudy] = useState(false);
-
-  // Molecule State
-  const [moleculeInput, setMoleculeInput] = useState("Caffeine");
-  const [moleculeData, setMoleculeData] = useState<MoleculeData | null>(null);
-  const [loadingMolecule, setLoadingMolecule] = useState(false);
-  const [reactionReagentInput, setReactionReagentInput] = useState("");
-  
-  // Reaction Conditions State
-  const [reactionTemp, setReactionTemp] = useState(25);
-  const [reactionPressure, setReactionPressure] = useState(1);
-  const [reactionCatalyst, setReactionCatalyst] = useState("");
-  const [reactionSolvent, setReactionSolvent] = useState("Ethanol");
-  const [showConditions, setShowConditions] = useState(false);
-
-
-  // Reaction Tutor State
-  const [reactionInput, setReactionInput] = useState("SN2 reaction of methyl bromide with hydroxide");
-  const [reactionData, setReactionData] = useState<ReactionData | null>(null);
-  const [loadingReaction, setLoadingReaction] = useState(false);
-
-  // Two-reactant simulation state
-  const [reactantA, setReactantA] = useState('ethanoic acid');
-  const [reactantB, setReactantB] = useState('ethanol');
+  const course = COURSES[courseId];
+  const [selectedId, setSelectedId] = useState(course.modules[0].id);
+  const [progress, setProgress] = useState<Progress>(() =>
+    readSaved("cc-progress-v2", blankProgress),
+  );
+  const [archive, setArchive] = useState<ArchiveItem[]>(() =>
+    readSaved("cc-archive-v2", []),
+  );
+  const [dark, setDark] = useState(() => readSaved("cc-night-v2", false));
+  const [query, setQuery] = useState("");
+  const [studyTab, setStudyTab] = useState<"notes" | "recall" | "sources">(
+    "notes",
+  );
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [molecule, setMolecule] = useState<MoleculeData | null>(null);
+  const [molInput, setMolInput] = useState("Benzene");
+  const [molLoading, setMolLoading] = useState(false);
+  const [reagent, setReagent] = useState("");
+  const [a, setA] = useState("ethanoic acid");
+  const [b, setB] = useState("ethanol");
+  const [conditions, setConditions] = useState<gemini.ReactionConditions>({
+    temp: 78,
+    pressure: 1,
+    catalyst: "sulfuric acid",
+    solvent: "ethanol",
+  });
   const [simulation, setSimulation] = useState<ReactionSimulation | null>(null);
-  const [simulationLoading, setSimulationLoading] = useState(false);
-
-  // Quiz State
-  const [quizTopic, setQuizTopic] = useState("Stereochemistry");
-  const [quizData, setQuizData] = useState<QuizData | null>(null);
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [quizScore, setQuizScore] = useState(0);
-  const [loadingQuiz, setLoadingQuiz] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<number | null>(null); // For MCQ
-  const [textAnswer, setTextAnswer] = useState(""); // For FRQ/FITB
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [quizCompleted, setQuizCompleted] = useState(false);
-  const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
-
-  // Chat State
-  const [chatHistory, setChatHistory] = useState<{id: string, role: 'user'|'model', text: string}[]>([]);
+  const [simLoading, setSimLoading] = useState(false);
+  const [mechanismQuery, setMechanismQuery] = useState(
+    "SN2 reaction of bromomethane with hydroxide",
+  );
+  const [mechanism, setMechanism] = useState<ReactionData | null>(null);
+  const [mechLoading, setMechLoading] = useState(false);
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [score, setScore] = useState(0);
+  const [quizDone, setQuizDone] = useState(false);
+  const [quizModule, setQuizModule] = useState<string | null>(null);
+  const [messages, setMessages] = useState<
+    { role: "user" | "model"; text: string }[]
+  >([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // --- Effect to Apply Theme ---
+  const moleculeRequest = useRef(0);
+  const quizRequest = useRef(0);
+  const simulationRequest = useRef(0);
+  const chatEnd = useRef<HTMLDivElement>(null);
+  const selected =
+    course.modules.find((m) => m.id === selectedId) || course.modules[0];
+  const guide = useMemo(
+    () => getStudyGuide(selected, courseId),
+    [selected, courseId],
+  );
+  const completed = course.modules.filter((m) =>
+    progress.completed.includes(m.id),
+  ).length;
+  const nextModule =
+    course.modules.find((m) => !progress.completed.includes(m.id)) ||
+    course.modules[0];
+  const percentage = Math.round((completed / course.modules.length) * 100);
   useEffect(() => {
-    document.body.className = `theme-${currentTheme}`;
-  }, [currentTheme]);
-
+    document.documentElement.dataset.theme = dark ? "night" : "day";
+    localStorage.setItem("cc-night-v2", JSON.stringify(dark));
+  }, [dark]);
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory]);
-
-  // --- Handlers ---
-
-  const handleSyllabusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newSyllabus = e.target.value;
-    setSelectedSyllabus(newSyllabus);
-    setModules(CURRICULA[newSyllabus]);
-    setExpandedCurriculum(false); 
-  };
-
-  const handleOpenStudyHubPanel = async (module: Module) => {
-      // Opens the slide-over panel in Dashboard
-      setActiveModule(module);
-      fetchStudyGuide(module);
-  };
-
-  const handleSelectStudyHubModule = (module: Module) => {
-      // Selects module in the full Study Hub View
-      setSelectedStudyModule(module);
-      fetchStudyGuide(module);
-  };
-
-  const fetchStudyGuide = async (module: Module) => {
-      setLoadingStudy(true);
-      setStudyGuide(null);
-      try {
-          const guide = await gemini.generateStudyGuide(module.topic);
-          setStudyGuide(guide);
-      } catch (error) {
-          alert("Could not generate study guide.");
-      } finally {
-          setLoadingStudy(false);
-      }
-  };
-
-  const handleCloseStudyHubPanel = () => {
-      setActiveModule(null);
-      setStudyGuide(null);
-  };
-
-  const handleMoleculeSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!moleculeInput) return;
-    setLoadingMolecule(true);
-    try {
-      const data = await gemini.generateMoleculeData(moleculeInput);
-      setMoleculeData(data);
-      setUserStats(prev => ({ ...prev, moleculesGenerated: prev.moleculesGenerated + 1 }));
-    } catch (error) {
-      alert("Failed to generate molecule. Please try again.");
-    } finally {
-      setLoadingMolecule(false);
-    }
-  };
-
-  const handleAnalyzeMolecule = async (modifiedData: MoleculeData) => {
-    setLoadingMolecule(true);
-    try {
-        const analyzedData = await gemini.analyzeMolecule(modifiedData);
-        setMoleculeData(analyzedData);
-    } catch (error) {
-        alert("Failed to analyze modification.");
-    } finally {
-        setLoadingMolecule(false);
-    }
-  };
-
-  const handleApplyReaction = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!moleculeData || !reactionReagentInput) return;
-      
-      setLoadingMolecule(true);
-      try {
-          const conditions = {
-              temp: reactionTemp,
-              pressure: reactionPressure,
-              catalyst: reactionCatalyst,
-              solvent: reactionSolvent
-          };
-
-          const productData = await gemini.applyReaction(moleculeData, reactionReagentInput, conditions);
-          setMoleculeData(productData);
-          setUserStats(prev => ({ ...prev, reactionsMastered: prev.reactionsMastered + 1 }));
-      } catch (error) {
-          alert("Failed to simulate reaction.");
-      } finally {
-          setLoadingMolecule(false);
-      }
-  };
-
-  const handleSaveToArchive = () => {
-      if (!moleculeData) return;
-      const newItem: ArchiveItem = {
-          id: Date.now().toString(),
-          name: moleculeData.name,
-          timestamp: Date.now(),
-          data: moleculeData
-      };
-      setArchive(prev => [newItem, ...prev]);
-      alert("Molecule saved to Archive!");
-  };
-
-  const handleRemoveFromArchive = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setArchive(prev => prev.filter(item => item.id !== id));
-  };
-
-  const loadFromArchive = (item: ArchiveItem) => {
-      setMoleculeData(item.data);
-      setView(AppView.MOLECULE_VIEWER);
-  };
-
-  const handleReactionSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if(!reactionInput) return;
-    setLoadingReaction(true);
-    try {
-      const data = await gemini.generateReactionSteps(reactionInput);
-      setReactionData(data);
-    } catch (error) {
-      alert("Failed to generate reaction steps.");
-    } finally {
-      setLoadingReaction(false);
-    }
-  }
-
-  const handleReactionSimulation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reactantA.trim() || !reactantB.trim()) return;
-    setSimulationLoading(true);
-    setSimulation(null);
-    try {
-      const result = await gemini.predictReaction(reactantA, reactantB, {
-        temp: reactionTemp,
-        pressure: reactionPressure,
-        catalyst: reactionCatalyst,
-        solvent: reactionSolvent,
+    localStorage.setItem("cc-progress-v2", JSON.stringify(progress));
+  }, [progress]);
+  useEffect(() => {
+    localStorage.setItem("cc-archive-v2", JSON.stringify(archive));
+  }, [archive]);
+  useEffect(() => {
+    localStorage.setItem("cc-course-v2", JSON.stringify(courseId));
+  }, [courseId]);
+  useEffect(() => {
+    let active = true;
+    normalizeMolecule(getReference("benzene")!)
+      .then((value) => {
+        if (active) setMolecule(value);
+      })
+      .catch(() => {
+        if (active)
+          setError(
+            "The molecule engine could not load. Refresh the page to retry.",
+          );
       });
-      setSimulation(result);
-      setUserStats((previous) => ({ ...previous, reactionsMastered: previous.reactionsMastered + 1 }));
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not predict this reaction.');
-    } finally {
-      setSimulationLoading(false);
-    }
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages, view]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 3500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const navigate = (target: AppView) => {
+    setView(target);
+    setMobileNav(false);
+    setError("");
   };
-
-  const startQuiz = async (topic?: string, moduleId?: string) => {
-    const targetTopic = topic || quizTopic;
-    setLoadingQuiz(true);
-    setQuizData(null);
-    setQuizCompleted(false);
-    setQuizScore(0);
-    setCurrentQuestionIdx(0);
-    setActiveModuleId(moduleId || null);
-    setTextAnswer("");
-    
+  const selectModule = (id: string) => {
+    quizRequest.current++;
+    setQuizLoading(false);
+    setSelectedId(id);
+    setQuiz(null);
+    setQuizDone(false);
+  };
+  const chooseCourse = (id: CourseId) => {
+    setCourseId(id);
+    selectModule(COURSES[id].modules[0].id);
+    setStudyTab("notes");
+    setQuery("");
+    setError("");
+  };
+  const openModule = (module: Module) => {
+    selectModule(module.id);
+    setStudyTab("notes");
+    navigate(AppView.STUDY_HUB);
+  };
+  const getError = (e: unknown) =>
+    e instanceof Error
+      ? e.message
+      : "This request could not complete. Check your connection and try again.";
+  const loadMolecule = async (input = molInput) => {
+    const request = ++moleculeRequest.current;
+    setMolLoading(true);
+    setError("");
+    setMolInput(input);
     try {
-      const data = await gemini.generateQuiz(targetTopic);
-      setQuizData(data);
-    } catch (error) {
-      alert("Failed to create quiz.");
+      const value = await gemini.generateMoleculeData(input);
+      if (request === moleculeRequest.current) setMolecule(value);
+    } catch (e) {
+      if (request === moleculeRequest.current) setError(getError(e));
     } finally {
-      setLoadingQuiz(false);
+      if (request === moleculeRequest.current) setMolLoading(false);
     }
   };
-
-  const handleQuizAnswerMCQ = (optionIdx: number) => {
-    if (showExplanation) return;
-    const question = quizData?.questions[currentQuestionIdx];
-    const option = question?.options?.[optionIdx];
-    if (!question || option === undefined) return;
-    setSelectedOption(optionIdx);
-    setShowExplanation(true);
-    if (option === question.correctAnswer) setQuizScore((score) => score + 1);
-  };
-
-  const handleQuizAnswerText = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (showExplanation) return;
-      setShowExplanation(true);
-      
-      // Simple case-insensitive check for FITB. 
-      // For short answer, we essentially 'reveal' the answer and let the user self-assess (or just give point if they tried)
-      const q = quizData?.questions[currentQuestionIdx];
-      if (!q) return;
-
-      if (q.type === 'fitb') {
-          if (textAnswer.trim().toLowerCase() === q.correctAnswer.toLowerCase()) {
-              setQuizScore(s => s + 1);
-          }
-      } else {
-          // Short answer: Always give points for effort in this demo, or strict string match?
-          // Let's require > 5 chars for 'effort'
-          if (textAnswer.length > 3) setQuizScore(s => s + 1);
-      }
-  };
-
-  const nextQuestion = () => {
-    if (!quizData) return;
-    if (currentQuestionIdx < quizData.questions.length - 1) {
-      setCurrentQuestionIdx(c => c + 1);
-      setSelectedOption(null);
-      setTextAnswer("");
-      setShowExplanation(false);
-    } else {
-      finishQuiz();
+  const save = () => {
+    if (!molecule) return;
+    if (archive.some((item) => item.data.smiles === molecule.smiles)) {
+      setNotice("This structure is already saved.");
+      return;
     }
+    setArchive((items) => [
+      {
+        id: crypto.randomUUID(),
+        name: molecule.name,
+        timestamp: Date.now(),
+        data: molecule,
+      },
+      ...items,
+    ]);
+    setNotice("Structure saved in this browser.");
   };
-
-  const finishQuiz = () => {
-      if (!quizData) return;
-      setQuizCompleted(true);
-      
-      const percentage = (quizScore / quizData.questions.length) * 100;
-      
-      // Update Stats
-      setUserStats(prev => ({
-          ...prev,
-          quizzesTaken: prev.quizzesTaken + 1,
-          totalScore: prev.totalScore + percentage
-      }));
-
-      // Unlock Module logic
-      if (activeModuleId && percentage >= 60) {
-          setModules(prev => {
-              const currentIndex = prev.findIndex(m => m.id === activeModuleId);
-              if (currentIndex === -1) return prev;
-
-              const newModules = [...prev];
-              newModules[currentIndex] = { ...newModules[currentIndex], status: 'completed', score: percentage };
-              if (currentIndex + 1 < newModules.length) {
-                  newModules[currentIndex + 1] = { ...newModules[currentIndex + 1], status: 'active' };
-              }
-              return newModules;
-          });
-      }
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const predict = async (e: FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-    
-    // Check if user is viewing a molecule and inject context
-    let messageText = chatInput;
-    if (moleculeData && (view === AppView.MOLECULE_VIEWER || view === AppView.CHAT_TUTOR)) {
-         messageText = `[Context: User is currently viewing a molecule named "${moleculeData.name}". Description: "${moleculeData.description}". Atoms: ${moleculeData.atoms.length}. Bonds: ${moleculeData.bonds.length}.] \n\n User Question: ${chatInput}`;
+    if (
+      !a.trim() ||
+      !b.trim() ||
+      !Number.isFinite(conditions.temp) ||
+      !Number.isFinite(conditions.pressure)
+    )
+      return;
+    const request = ++simulationRequest.current;
+    setSimLoading(true);
+    setSimulation(null);
+    setError("");
+    try {
+      const result = await gemini.predictReaction(a, b, conditions);
+      if (request === simulationRequest.current) setSimulation(result);
+    } catch (err) {
+      if (request === simulationRequest.current) setError(getError(err));
+    } finally {
+      if (request === simulationRequest.current) setSimLoading(false);
     }
-
-    const userMsg = { id: Date.now().toString(), role: 'user' as const, text: chatInput }; // Display original text
-    const apiMsg = { id: Date.now().toString(), role: 'user' as const, text: messageText }; // Send context text
-
-    setChatHistory(prev => [...prev, userMsg]);
+  };
+  const invalidateSimulation = () => {
+    simulationRequest.current++;
+    setSimulation(null);
+    setSimLoading(false);
+  };
+  const updateConditions = (value: gemini.ReactionConditions) => {
+    invalidateSimulation();
+    setConditions(value);
+  };
+  const startQuiz = async () => {
+    const request = ++quizRequest.current;
+    setQuizLoading(true);
+    setQuiz(null);
+    setError("");
+    setQuizDone(false);
+    setAnswer(null);
+    setScore(0);
+    setQuizIndex(0);
+    setQuizModule(selected.id);
+    try {
+      const result = await gemini.generateQuiz(
+        selected.title,
+        course.name +
+          " " +
+          course.version +
+          ". " +
+          selected.level +
+          ". Notes: " +
+          JSON.stringify(guide.keyPoints),
+      );
+      if (
+        result.questions.length !== 5 ||
+        result.questions.some(
+          (q) =>
+            q.type !== "mcq" ||
+            q.options?.length !== 4 ||
+            !q.options.includes(q.correctAnswer),
+        )
+      )
+        throw new Error(
+          "The generated question set is inconsistent. Generate a new set.",
+        );
+      if (request === quizRequest.current) setQuiz(result);
+    } catch (err) {
+      if (request === quizRequest.current) setError(getError(err));
+    } finally {
+      if (request === quizRequest.current) setQuizLoading(false);
+    }
+  };
+  const nextQuestion = () => {
+    if (!quiz) return;
+    if (quizIndex < quiz.questions.length - 1) {
+      setQuizIndex((i) => i + 1);
+      setAnswer(null);
+      return;
+    }
+    const result = Math.round((score / quiz.questions.length) * 100);
+    setQuizDone(true);
+    setProgress((p) => ({
+      ...p,
+      quizzes: p.quizzes + 1,
+      total: p.total + result,
+      scores: { ...p.scores, [quizModule || selected.id]: result },
+    }));
+  };
+  const sendChat = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+    const text = chatInput.trim();
     setChatInput("");
     setChatLoading(true);
-    
-    const apiHistory = chatHistory.map(h => ({
-        role: h.role,
-        parts: [{ text: h.text }]
+    setError("");
+    const history = messages.map((m) => ({
+      role: m.role,
+      parts: [{ text: m.text }],
     }));
-
+    setMessages((old) => [...old, { role: "user", text }]);
     try {
-        const responseText = await gemini.chatWithTutor(apiHistory, apiMsg.text);
-        setChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model' as const, text: responseText }]);
-    } catch (e) {
-        setChatHistory(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model' as const, text: "Sorry, I encountered an error." }]);
+      const reply = await gemini.chatWithTutor(
+        history,
+        "Course: " +
+          course.name +
+          "; active module: " +
+          selected.title +
+          "; notes: " +
+          JSON.stringify(guide.keyPoints) +
+          "\nQuestion: " +
+          text,
+      );
+      setMessages((old) => [...old, { role: "model", text: reply }]);
+    } catch (err) {
+      setError(getError(err));
     } finally {
-        setChatLoading(false);
+      setChatLoading(false);
     }
   };
-
-  const renderChatComponent = (compact = false) => (
-      <div className={`flex flex-col h-full bg-skin-surface border border-skin-border rounded-xl shadow-sm ${compact ? '' : 'animate-fade-in'}`}>
-          <div className="p-4 border-b border-skin-border flex items-center justify-between bg-skin-surface z-10 rounded-t-xl">
-              <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2 text-skin-main">
-                      <MessageCircle className="text-skin-primary" /> {compact ? "AI Tutor" : "Chat with AI Tutor"}
-                  </h2>
-                  {moleculeData && (
-                      <div className="flex items-center gap-1 mt-1 text-[10px] text-skin-primary font-bold uppercase tracking-wide">
-                          <Eye size={10} /> Viewing: {moleculeData.name}
-                      </div>
-                  )}
-              </div>
-              <span className="text-xs bg-skin-primary-light text-skin-primary px-2 py-1 rounded-full font-medium">Gemini 2.5</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-skin-base">
-            {chatHistory.length === 0 && (
-                <div className="text-center py-10 text-skin-muted animate-enter">
-                    <div className="w-12 h-12 bg-skin-surface rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-skin-border">
-                         <MessageCircle className="w-6 h-6 text-skin-primary-light" />
-                    </div>
-                    <p className="text-sm">Ask me anything about Organic Chemistry!</p>
-                </div>
+  const renderModules = (items: Module[]) => (
+    <div className="module-list">
+      {items.map((module) => (
+        <button
+          className="module-row"
+          key={module.id}
+          onClick={() => openModule(module)}
+        >
+          <span
+            className={
+              "module-code" +
+              (progress.completed.includes(module.id) ? " complete" : "")
+            }
+          >
+            {progress.completed.includes(module.id) ? (
+              <Check size={17} />
+            ) : (
+              module.code
             )}
-            {chatHistory.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                    <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${
-                        msg.role === 'user' 
-                            ? 'bg-skin-primary text-white rounded-br-none shadow-md' 
-                            : 'bg-skin-surface border border-skin-border text-skin-main rounded-bl-none shadow-sm'
-                    }`}>
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                    </div>
-                </div>
-            ))}
-            {chatLoading && (
-                <div className="flex justify-start animate-enter">
-                    <div className="bg-skin-surface border border-skin-border p-3 rounded-2xl rounded-bl-none shadow-sm">
-                        <div className="flex gap-1">
-                            <div className="w-1.5 h-1.5 bg-skin-muted rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
-                            <div className="w-1.5 h-1.5 bg-skin-muted rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
-                            <div className="w-1.5 h-1.5 bg-skin-muted rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
-                        </div>
-                    </div>
-                </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-          <div className="p-3 bg-skin-surface border-t border-skin-border rounded-b-xl">
-              <form onSubmit={handleSendMessage} className="flex gap-2">
-                  <input 
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder={moleculeData ? `Ask about ${moleculeData.name}...` : "Ask a question..."}
-                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-skin-border focus:ring-2 focus:ring-skin-primary outline-none bg-skin-base text-skin-main transition-all"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!chatInput.trim() || chatLoading}
-                    className="bg-skin-primary text-white p-2 rounded-lg hover:brightness-110 transition-all disabled:opacity-50 active:scale-95"
-                  >
-                      <ArrowRight size={18}/>
-                  </button>
-              </form>
-          </div>
-      </div>
+          </span>
+          <span className="module-title">
+            <strong>{module.title}</strong>
+            <small>
+              {module.group} · {module.level}
+            </small>
+          </span>
+          {progress.scores[module.id] !== undefined && (
+            <span className="module-score">{progress.scores[module.id]}%</span>
+          )}
+          <ChevronRight size={16} />
+        </button>
+      ))}
+    </div>
   );
-
-  // --- Views ---
-
-  const renderDashboard = () => {
-      const avgScore = userStats.quizzesTaken > 0 ? Math.round(userStats.totalScore / userStats.quizzesTaken) : 0;
-      const displayedModules = expandedCurriculum ? modules : modules.slice(0, 5);
-      
-      const chartData = modules.map(m => ({ 
-          name: m.title.split(' ')[0], 
-          score: m.score || 0, 
-          status: m.status
-      }));
-
-      return (
-        <div className="p-8 animate-fade-in overflow-y-auto h-full relative">
-            {/* ... Header ... */}
-            <div className="mb-8 flex flex-col md:flex-row justify-between items-end gap-4 animate-slide-up">
-                <div>
-                    <h1 className="text-4xl font-bold text-skin-main tracking-tight">Welcome back, Chemist!</h1>
-                    <p className="text-skin-muted mt-2 text-lg">Your laboratory is ready for discovery.</p>
-                </div>
-                
-                {/* Improved Curriculum Selector */}
-                <div className="flex flex-col items-end gap-1.5">
-                     <span className="text-[11px] font-black text-skin-muted uppercase tracking-widest flex items-center gap-1.5">
-                         <GraduationCap size={14} className="text-skin-primary"/> Active Curriculum
-                     </span>
-                     <div className="relative z-20 group">
-                        <select 
-                            value={selectedSyllabus} 
-                            onChange={handleSyllabusChange} 
-                            className="appearance-none pl-4 pr-10 py-3 bg-skin-surface border border-skin-border text-skin-main font-bold text-sm rounded-xl shadow-sm hover:border-skin-primary focus:outline-none focus:ring-2 focus:ring-skin-primary/50 transition-all cursor-pointer min-w-[240px]"
-                        >
-                            <option className="bg-skin-surface text-skin-main" value="UNDERGRAD">Undergraduate</option>
-                            <option className="bg-skin-surface text-skin-main" value="ALEVEL">A-Level (UK)</option>
-                            <option className="bg-skin-surface text-skin-main" value="IB">IB Diploma</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-skin-muted pointer-events-none group-hover:text-skin-primary transition-colors" size={16} />
-                    </div>
-                </div>
-            </div>
-
-            {/* ... Stats Cards ... */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <DashboardCard title="Modules Done" value={modules.filter(m => m.status === 'completed').length + '/' + modules.length} subtitle="Syllabus Progress" icon={BookOpen} colorClass="bg-emerald-500" delay={100} />
-                <DashboardCard title="Avg Quiz Score" value={`${avgScore}%`} subtitle={`${userStats.quizzesTaken} Quizzes Taken`} icon={Award} colorClass="bg-amber-500" delay={200} />
-                <DashboardCard title="Reactions" value={userStats.reactionsMastered} subtitle="Applied in Lab" icon={Beaker} colorClass="bg-indigo-500" delay={300} />
-                <DashboardCard title="Archive" value={archive.length} subtitle="Saved Molecules" icon={Archive} colorClass="bg-blue-500" delay={400} />
-            </div>
-
-            {/* ... Main Grid ... */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Curriculum List */}
-                <div className="bg-skin-surface p-6 rounded-xl border border-skin-border shadow-sm animate-enter delay-200">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-skin-main">Your Curriculum</h3>
-                        <span className="text-xs font-bold text-skin-primary bg-skin-primary-light px-3 py-1 rounded-full">{Math.round((modules.filter(m => m.status === 'completed').length / modules.length) * 100)}% Complete</span>
-                    </div>
-                    <div className="space-y-4">
-                        {displayedModules.map((module, idx) => (
-                            <div key={module.id} className={`p-4 rounded-xl border transition-all duration-300 hover:shadow-md ${module.status === 'locked' ? 'bg-skin-base border-skin-border opacity-60' : module.status === 'active' ? 'bg-skin-surface border-skin-primary shadow-sm ring-1 ring-skin-primary-light' : 'bg-emerald-50/10 border-emerald-500/30'} animate-enter`} style={{ animationDelay: `${idx * 50}ms` }}>
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-4 cursor-pointer" onClick={() => handleOpenStudyHubPanel(module)}>
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${module.status === 'locked' ? 'bg-skin-border text-skin-muted' : module.status === 'active' ? 'bg-skin-primary text-white' : 'bg-emerald-500 text-white'}`}>
-                                            {module.status === 'locked' ? <Lock size={16}/> : modules.findIndex(m => m.id === module.id) + 1}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-skin-main">{module.title}</h4>
-                                            <p className="text-xs text-skin-muted mt-0.5">{module.description}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                         <button onClick={() => handleOpenStudyHubPanel(module)} className="p-2 text-skin-muted hover:text-skin-primary hover:bg-skin-base rounded-lg transition-colors" title="Quick View"><BookOpen size={18} /></button>
-                                        {module.status === 'active' && (
-                                            <button onClick={() => { setView(AppView.QUIZ_ARENA); startQuiz(module.topic, module.id); }} className="bg-skin-primary text-white p-2.5 rounded-lg hover:brightness-110 transition-all shadow-md shadow-skin-primary/30" title="Start Quiz"><Play size={18} fill="currentColor" /></button>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {modules.length > 5 && (
-                            <button onClick={() => setExpandedCurriculum(!expandedCurriculum)} className="w-full py-3 mt-2 flex items-center justify-center gap-2 text-skin-muted hover:text-skin-primary hover:bg-skin-base rounded-lg transition-colors text-sm font-medium">
-                                {expandedCurriculum ? <>Show Less <ChevronUp size={16} /></> : <>View Full Curriculum ({modules.length - 5} more) <ChevronDown size={16} /></>}
-                            </button>
-                        )}
-                    </div>
-                </div>
-                 
-                 {/* Charts & Archive Preview */}
-                 <div className="flex flex-col gap-8">
-                     <div className="bg-skin-surface p-6 rounded-xl border border-skin-border shadow-sm h-80 animate-enter delay-300 flex flex-col">
-                         <h3 className="text-lg font-bold text-skin-main mb-6 flex items-center gap-2"><Award size={18} className="text-skin-primary"/> Performance Analytics</h3>
-                         <div className="flex-1 w-full h-full min-h-0">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData} margin={{top: 10, right: 10, left: -20, bottom: 0}} barGap={0}>
-                                    <defs>
-                                        <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="rgb(var(--color-primary))" stopOpacity={0.8}/>
-                                            <stop offset="95%" stopColor="rgb(var(--color-primary))" stopOpacity={0.3}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgb(var(--color-border))" opacity={0.5}/>
-                                    <XAxis 
-                                        dataKey="name" 
-                                        tick={{fontSize: 11, fill: 'rgb(var(--color-text-muted))', fontWeight: 600}} 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        dy={10}
-                                    />
-                                    <YAxis 
-                                        domain={[0, 100] as [number, number]} 
-                                        axisLine={false} 
-                                        tickLine={false}
-                                        tick={{fontSize: 11, fill: 'rgb(var(--color-text-muted))', fontWeight: 600}} 
-                                    />
-                                    <Tooltip 
-                                        cursor={{fill: 'rgb(var(--color-bg-main))', opacity: 0.5}} 
-                                        contentStyle={{ backgroundColor: 'rgb(var(--color-surface))', borderRadius: '8px', border: '1px solid rgb(var(--color-border))', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} 
-                                        labelStyle={{ fontWeight: 'bold', color: 'rgb(var(--color-text-main))', marginBottom: '4px' }}
-                                    />
-                                    <Bar 
-                                        dataKey="score" 
-                                        radius={[4, 4, 4, 4] as [number, number, number, number]} 
-                                        barSize={24} 
-                                        fill="url(#colorScore)"
-                                        background={{ fill: 'rgba(var(--color-border), 0.3)', radius: 4 }}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
-                         </div>
-                     </div>
-                     
-                     <div className="bg-skin-surface p-6 rounded-xl border border-skin-border shadow-sm flex-1 animate-enter delay-400">
-                          <h3 className="text-lg font-bold text-skin-main mb-4 flex items-center gap-2"><Archive size={18} className="text-blue-500"/> Recent Saves</h3>
-                          <div className="space-y-3">
-                              {archive.slice(0, 3).map(item => (
-                                  <div key={item.id} className="flex justify-between items-center p-3 bg-skin-base rounded-lg group">
-                                      <div className="flex items-center gap-3">
-                                          <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs border border-blue-200">2D</div>
-                                          <div>
-                                              <p className="font-bold text-sm text-skin-main">{item.name}</p>
-                                              <p className="text-[10px] text-skin-muted">{new Date(item.timestamp).toLocaleDateString()}</p>
-                                          </div>
-                                      </div>
-                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={() => loadFromArchive(item)} className="p-1.5 text-skin-primary hover:bg-skin-surface rounded-md"><Eye size={16}/></button>
-                                          <button onClick={(e) => handleRemoveFromArchive(item.id, e)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-md"><Trash2 size={16}/></button>
-                                      </div>
-                                  </div>
-                              ))}
-                              {archive.length === 0 && <p className="text-sm text-skin-muted italic text-center py-4">No saved molecules yet.</p>}
-                          </div>
-                     </div>
-                 </div>
-            </div>
-            
-            {/* Slide-over Study Panel */}
-            {activeModule && (
-                <div className="fixed inset-0 z-50 flex justify-end">
-                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={handleCloseStudyHubPanel}></div>
-                    <div className="relative w-full max-w-lg bg-skin-surface h-full shadow-2xl p-8 overflow-y-auto border-l border-skin-border animate-slide-up">
-                        <button onClick={handleCloseStudyHubPanel} className="absolute top-6 right-6 p-2 rounded-full hover:bg-skin-base"><X size={20}/></button>
-                        <span className="text-xs font-bold text-skin-primary uppercase tracking-wider mb-2 block">Study Module</span>
-                        <h2 className="text-3xl font-bold text-skin-main mb-4">{activeModule.title}</h2>
-                        
-                        {loadingStudy ? (
-                            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-skin-primary"/></div>
-                        ) : studyGuide ? (
-                             <div className="space-y-8">
-                                 <div className="bg-skin-base p-4 rounded-xl border border-skin-border">
-                                     <h3 className="font-bold text-skin-main flex items-center gap-2 mb-2"><BrainCircuit size={18}/> Summary</h3>
-                                     <p className="text-sm text-skin-sidebar-text leading-relaxed">{studyGuide.summary}</p>
-                                 </div>
-                                 
-                                 <div>
-                                     <h3 className="font-bold text-skin-main mb-3 flex items-center gap-2"><CheckCircle size={18} className="text-emerald-500"/> Key Concepts</h3>
-                                     <ul className="space-y-2">
-                                         {studyGuide.keyPoints.map((kp, i) => (
-                                             <li key={i} className="flex gap-3 text-sm text-skin-sidebar-text">
-                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
-                                                 {kp}
-                                             </li>
-                                         ))}
-                                     </ul>
-                                 </div>
-
-                                 <div>
-                                     <h3 className="font-bold text-skin-main mb-3 flex items-center gap-2"><AlertTriangle size={18} className="text-amber-500"/> Common Pitfalls</h3>
-                                     <ul className="space-y-2">
-                                         {studyGuide.commonMistakes.map((cm, i) => (
-                                             <li key={i} className="flex gap-3 text-sm text-skin-sidebar-text bg-amber-50/50 p-2 rounded border border-amber-100/50">
-                                                 <X size={14} className="text-amber-500 mt-0.5 shrink-0"/>
-                                                 {cm}
-                                             </li>
-                                         ))}
-                                     </ul>
-                                 </div>
-                                 
-                                 <Flashcards cards={studyGuide.flashcards} topic={activeModule.topic} />
-
-                                 <div>
-                                     <h3 className="font-bold text-skin-main mb-3 flex items-center gap-2"><Library size={18} className="text-blue-500"/> Resources</h3>
-                                     <div className="grid gap-3">
-                                         {studyGuide.resources.map((res, i) => (
-                                             <a key={i} href={res.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 rounded-lg border border-skin-border hover:border-skin-primary hover:bg-skin-base transition-all group">
-                                                 <div className="w-10 h-10 rounded bg-skin-primary-light flex items-center justify-center text-skin-primary group-hover:scale-110 transition-transform">
-                                                     {res.source === 'YouTube' ? <Video size={18}/> : <ExternalLink size={18}/>}
-                                                 </div>
-                                                 <div>
-                                                     <p className="font-bold text-sm text-skin-main">{res.title}</p>
-                                                     <p className="text-xs text-skin-muted">{res.source}</p>
-                                                 </div>
-                                                 <ArrowRight size={16} className="ml-auto text-skin-muted group-hover:text-skin-primary"/>
-                                             </a>
-                                         ))}
-                                     </div>
-                                 </div>
-                             </div>
-                        ) : (
-                            <p className="text-skin-muted">Content unavailable.</p>
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
-      );
-  };
-  
-  // --- Main Layout ---
   return (
-    <div className="flex h-screen w-full bg-skin-base text-skin-main font-sans overflow-hidden transition-colors duration-500">
-      
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-skin-sidebar-bg border-r border-skin-border flex flex-col transition-all duration-300 relative z-20 shadow-xl overflow-hidden shrink-0`}>
-        <div className="p-4 flex items-center justify-between border-b border-white/10">
-          {sidebarOpen && (
-              <div className="flex items-center gap-2 animate-fade-in">
-                  <div className="w-8 h-8 bg-gradient-to-br from-skin-primary to-purple-500 rounded-lg flex items-center justify-center text-white font-bold shadow-lg">C</div>
-                  <span className="font-bold text-lg text-white tracking-tight">CarbonCanvas</span>
-              </div>
-          )}
-          <button aria-label={sidebarOpen ? 'Collapse navigation' : 'Expand navigation'} onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-skin-sidebar-text hover:bg-white/10 rounded-lg transition-colors">
-            <Menu size={20} />
-          </button>
-        </div>
-
-        <nav className="flex-1 p-3 space-y-2 overflow-y-auto">
-          <div className="text-[10px] font-bold text-skin-sidebar-text/50 uppercase tracking-wider px-4 mb-2 mt-4">{sidebarOpen ? 'Main Menu' : 'Menu'}</div>
-          <NavItem view={AppView.DASHBOARD} current={view} icon={Atom} label="Dashboard" onClick={setView} delay={100} />
-          <NavItem view={AppView.MOLECULE_VIEWER} current={view} icon={Search} label="Molecule Lab" onClick={setView} delay={150} />
-          <NavItem view={AppView.QUIZ_ARENA} current={view} icon={Zap} label="Quiz Arena" onClick={setView} delay={200} />
-          <NavItem view={AppView.REACTION_TUTOR} current={view} icon={Beaker} label="Reaction Tutor" onClick={setView} delay={250} />
-          <NavItem view={AppView.REACTION_SIMULATOR} current={view} icon={Combine} label="Reaction Simulator" onClick={setView} delay={300} />
-          <NavItem view={AppView.STUDY_HUB} current={view} icon={Library} label="Study Hub" onClick={setView} delay={350} />
-          <NavItem view={AppView.CHAT_TUTOR} current={view} icon={MessageCircle} label="AI Tutor" onClick={setView} delay={400} />
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      {mobileNav && (
+        <button
+          className="nav-scrim"
+          aria-label="Close navigation"
+          onClick={() => setMobileNav(false)}
+        />
+      )}
+      <aside className={"sidebar" + (mobileNav ? " open" : "")}>
+        <a
+          className="brand"
+          href="#workspace"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate(AppView.DASHBOARD);
+          }}
+        >
+          <span className="brand-mark">
+            <Atom size={24} />
+          </span>
+          <span>
+            CarbonCanvas<small>Chemistry workspace</small>
+          </span>
+        </a>
+        <button
+          className="mobile-close icon-button"
+          aria-label="Close navigation"
+          onClick={() => setMobileNav(false)}
+        >
+          <X size={21} />
+        </button>
+        <nav aria-label="Main navigation">
+          {NAV.map(({ view: target, label, icon: Icon }) => (
+            <button
+              className={"nav-item" + (view === target ? " active" : "")}
+              key={target}
+              aria-current={view === target ? "page" : undefined}
+              onClick={() => navigate(target)}
+            >
+              <Icon size={19} />
+              <span>{label}</span>
+            </button>
+          ))}
         </nav>
-
-        {/* Theme Selector */}
-        <div className="p-4 border-t border-white/10 relative">
-             <button 
-                onClick={() => setThemeMenuOpen(!themeMenuOpen)} 
-                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${themeMenuOpen ? 'bg-white/10' : 'hover:bg-white/5'} text-skin-sidebar-text`}
-             >
-                 <Palette size={20} />
-                 {sidebarOpen && <span className="text-sm font-medium">Theme</span>}
-                 {sidebarOpen && <ChevronUp size={16} className={`ml-auto transition-transform ${themeMenuOpen ? 'rotate-180' : ''}`}/>}
-             </button>
-             
-             {themeMenuOpen && (
-                 <div className={`absolute bottom-full left-4 right-4 mb-2 bg-skin-surface rounded-xl shadow-xl border border-skin-border p-2 animate-pop ${!sidebarOpen ? 'left-14 w-48' : ''}`}>
-                     {THEMES.map(theme => (
-                         <button
-                            key={theme.id}
-                            onClick={() => { setCurrentTheme(theme.id); setThemeMenuOpen(false); }}
-                            className={`w-full flex items-center gap-3 p-2 rounded-lg text-sm transition-colors ${currentTheme === theme.id ? 'bg-skin-primary/10 text-skin-primary' : 'text-skin-main hover:bg-skin-base'}`}
-                         >
-                             <div className={`w-6 h-6 rounded-md flex items-center justify-center ${theme.color} text-white`}>
-                                 <theme.icon size={14} />
-                             </div>
-                             <span className="font-medium">{theme.name}</span>
-                             {currentTheme === theme.id && <CheckCircle size={14} className="ml-auto"/>}
-                         </button>
-                     ))}
-                 </div>
-             )}
+        <div className="sidebar-bottom">
+          <div className="course-caption">
+            <BookOpen size={16} />
+            <span>
+              {course.shortName}
+              <small>{course.version}</small>
+            </span>
+          </div>
+          <button className="nav-item" onClick={() => setDark((v) => !v)}>
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+            <span>{dark ? "Light workspace" : "Night workspace"}</span>
+          </button>
+          <p>
+            Learn the reasoning.
+            <br />
+            Check the evidence.
+          </p>
         </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-skin-base">
-          {view === AppView.DASHBOARD && renderDashboard()}
-          
+      </aside>
+      <div className="workspace">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <button
+              className="mobile-menu icon-button"
+              aria-label="Open navigation"
+              onClick={() => setMobileNav(true)}
+            >
+              <Menu size={21} />
+            </button>
+            <span>Workspace</span>
+            <ChevronRight size={13} />
+            <strong>{NAV.find((n) => n.view === view)?.label}</strong>
+          </div>
+          <label className="course-picker">
+            <GraduationCap size={18} />
+            <span className="sr-only">Active curriculum</span>
+            <select
+              aria-label="Active curriculum"
+              value={courseId}
+              onChange={(e) => chooseCourse(e.target.value as CourseId)}
+            >
+              <option value="ALEVEL">Cambridge 9701</option>
+              <option value="IB">IB Diploma</option>
+              <option value="UNDERGRAD">Undergraduate</option>
+            </select>
+          </label>
+        </header>
+        <main id="main-content" className="main-content">
+          {error && (
+            <div className="notice error" role="alert">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+              <button
+                className="icon-button"
+                aria-label="Dismiss error"
+                onClick={() => setError("")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {notice && (
+            <div className="toast" role="status">
+              <Check size={17} />
+              {notice}
+            </div>
+          )}
+          {view === AppView.DASHBOARD && (
+            <>
+              <PageHeading
+                title="Your chemistry workspace"
+                description="Build understanding, one structure and one idea at a time."
+              />
+              <div className="overview-grid">
+                <section className="continue-study">
+                  <div className="study-meta">
+                    <span className="tag copper">{nextModule.level}</span>
+                    <span>
+                      {course.shortName} / {nextModule.code}
+                    </span>
+                  </div>
+                  <h2>{nextModule.title}</h2>
+                  <p>{nextModule.description}</p>
+                  <Button onClick={() => openModule(nextModule)}>
+                    Open study notes <ArrowRight size={17} />
+                  </Button>
+                  <div className="study-progress">
+                    <span>
+                      {completed} of {course.modules.length} modules reviewed
+                    </span>
+                    <span>{percentage}%</span>
+                    <progress
+                      value={completed}
+                      max={course.modules.length}
+                      aria-label="Modules reviewed"
+                    />
+                  </div>
+                </section>
+                <section className="reference-preview">
+                  <div className="section-heading">
+                    <h3>Structure in focus</h3>
+                    <span className="tag">Benzene</span>
+                  </div>
+                  <MoleculePreview />
+                  <div className="preview-caption">
+                    <p>One ring, six equivalent bonds.</p>
+                    <button
+                      className="text-link"
+                      onClick={() => {
+                        void loadMolecule("benzene");
+                        navigate(AppView.MOLECULE_VIEWER);
+                      }}
+                    >
+                      Explore the structure <ArrowRight size={15} />
+                    </button>
+                  </div>
+                </section>
+              </div>
+              <div className="workspace-lower">
+                <section>
+                  <div className="section-heading">
+                    <div>
+                      <h2>Your learning pathway</h2>
+                      <p>{course.version}</p>
+                    </div>
+                    <button
+                      className="text-link"
+                      onClick={() => navigate(AppView.STUDY_HUB)}
+                    >
+                      Browse all modules <ArrowRight size={15} />
+                    </button>
+                  </div>
+                  {renderModules(course.modules.slice(0, 5))}
+                </section>
+                <aside className="workspace-notes">
+                  <h2>Keep the evidence close</h2>
+                  <p>
+                    Study notes cite their sources. Molecule drawings preserve
+                    charges and bond orders. Predictions stay labelled as
+                    predictions.
+                  </p>
+                  <div className="session-stat">
+                    <span>Practice sets completed</span>
+                    <strong>{progress.quizzes}</strong>
+                  </div>
+                  <div className="session-stat">
+                    <span>Average practice score</span>
+                    <strong>
+                      {progress.quizzes
+                        ? Math.round(progress.total / progress.quizzes) + "%"
+                        : "—"}
+                    </strong>
+                  </div>
+                  <div className="session-stat">
+                    <span>Saved structures</span>
+                    <strong>{archive.length}</strong>
+                  </div>
+                  <a
+                    className="text-link"
+                    href={course.sources[0].url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View the course source <ExternalLink size={14} />
+                  </a>
+                </aside>
+              </div>
+            </>
+          )}
+          {view === AppView.STUDY_HUB && (
+            <>
+              <PageHeading
+                title="Study hub"
+                description="Source-linked notes and active recall for your current course."
+              />
+              <div className="study-layout">
+                <aside className="module-browser">
+                  <div className="browser-heading">
+                    <h2>{course.shortName}</h2>
+                    <p>{course.version}</p>
+                  </div>
+                  <label className="search-field">
+                    <Search size={17} />
+                    <span className="sr-only">Search modules</span>
+                    <input
+                      aria-label="Search modules"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Find a module…"
+                    />
+                  </label>
+                  <div className="study-module-list">
+                    {course.modules
+                      .filter((m) =>
+                        (m.title + " " + m.code + " " + m.group)
+                          .toLowerCase()
+                          .includes(query.toLowerCase()),
+                      )
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          className={
+                            "study-module" +
+                            (m.id === selected.id ? " selected" : "")
+                          }
+                          onClick={() => {
+                            selectModule(m.id);
+                            setStudyTab("notes");
+                          }}
+                        >
+                          <span>{m.code}</span>
+                          <span>
+                            {m.title}
+                            <small>{m.level}</small>
+                          </span>
+                          {progress.completed.includes(m.id) && (
+                            <Check size={14} />
+                          )}
+                        </button>
+                      ))}
+                    {!course.modules.some((m) =>
+                      (m.title + " " + m.code + " " + m.group)
+                        .toLowerCase()
+                        .includes(query.toLowerCase()),
+                    ) && (
+                      <p className="empty-search">
+                        No modules match. Try another term.
+                      </p>
+                    )}
+                  </div>
+                </aside>
+                <article className="study-article">
+                  <div className="study-meta">
+                    <span className="tag">{selected.level}</span>
+                    <span>
+                      {selected.group} / {selected.code}
+                    </span>
+                  </div>
+                  <h2>{selected.title}</h2>
+                  <p className="article-summary">{guide.summary}</p>
+                  <div
+                    className="article-tabs"
+                    role="tablist"
+                    aria-label="Study material"
+                  >
+                    {(["notes", "recall", "sources"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        role="tab"
+                        aria-selected={studyTab === tab}
+                        aria-controls={"study-" + tab}
+                        id={"tab-" + tab}
+                        onClick={() => setStudyTab(tab)}
+                      >
+                        {tab === "notes"
+                          ? "Study notes"
+                          : tab === "recall"
+                            ? "Flashcards"
+                            : "Sources"}
+                        {tab === "recall" && (
+                          <span>{guide.flashcards.length}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    role="tabpanel"
+                    id={"study-" + studyTab}
+                    aria-labelledby={"tab-" + studyTab}
+                  >
+                    {studyTab === "notes" && (
+                      <>
+                        <h3>Core ideas</h3>
+                        <div className="lesson-concepts">
+                          {guide.flashcards.map((card) => (
+                            <section key={card.term}>
+                              <h4>{card.term}</h4>
+                              <p>{card.definition}</p>
+                            </section>
+                          ))}
+                        </div>
+                        <div className="mistake-note">
+                          <h3>Watch for this</h3>
+                          {guide.commonMistakes.map((point) => (
+                            <p key={point}>{point}</p>
+                          ))}
+                        </div>
+                        <div className="study-actions">
+                          <Button onClick={() => setStudyTab("recall")}>
+                            Practise with flashcards <ArrowRight size={16} />
+                          </Button>
+                          <Button
+                            secondary
+                            onClick={() => {
+                              setProgress((p) => ({
+                                ...p,
+                                completed: p.completed.includes(selected.id)
+                                  ? p.completed.filter(
+                                      (id) => id !== selected.id,
+                                    )
+                                  : [...p.completed, selected.id],
+                              }));
+                            }}
+                          >
+                            {progress.completed.includes(selected.id) ? (
+                              <>
+                                <Check size={16} /> Reviewed
+                              </>
+                            ) : (
+                              "Mark as reviewed"
+                            )}
+                          </Button>
+                        </div>
+                        <p className="fine-print">
+                          Starter notes, not a complete course textbook.{" "}
+                          {course.note}
+                        </p>
+                        <h3>Read further</h3>
+                        <SourceList sources={guide.resources} />
+                      </>
+                    )}
+                    {studyTab === "recall" && (
+                      <Flashcards
+                        cards={guide.flashcards}
+                        topic={selected.title}
+                      />
+                    )}
+                    {studyTab === "sources" && (
+                      <>
+                        <h3>Sources and course coverage</h3>
+                        <p>{course.note}</p>
+                        <p className="fine-print">
+                          Original concise notes checked against the linked
+                          syllabus and textbook material. Revision-provider
+                          pages are external reading resources. Last content
+                          review: {REVIEW_DATE}.
+                        </p>
+                        <SourceList sources={guide.resources} />
+                        <h3>Scientific workflows</h3>
+                        <p>
+                          Explore the source instructions for compound lookup
+                          and scientific review. These GitHub links are
+                          reference workflows; the app does not execute them.
+                        </p>
+                        <div className="skill-links">
+                          {SCIENCE_SKILLS.map((skill) => (
+                            <a
+                              key={skill.name}
+                              href={skill.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <strong>{skill.name}</strong>
+                              <p>{skill.description}</p>
+                              <ExternalLink size={15} />
+                            </a>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </article>
+              </div>
+            </>
+          )}
           {view === AppView.MOLECULE_VIEWER && (
-              <div className="h-full flex flex-col animate-fade-in">
-                  <div className="p-4 border-b border-skin-border bg-skin-surface flex justify-between items-center z-20 shadow-sm">
-                      <div className="flex gap-4 items-center">
-                          <h2 className="text-xl font-bold text-skin-main flex items-center gap-2"><FlaskConical className="text-skin-primary"/> Molecular Visualizer</h2>
-                          <form onSubmit={handleMoleculeSearch} className="flex gap-2">
-                              <input 
-                                value={moleculeInput} 
-                                onChange={(e) => setMoleculeInput(e.target.value)} 
-                                className="px-4 py-2 rounded-lg border border-skin-border bg-skin-base text-skin-main focus:ring-2 focus:ring-skin-primary outline-none" 
-                                placeholder="Enter IUPAC name..."
-                              />
-                              <button type="submit" disabled={loadingMolecule} className="bg-skin-primary text-white px-4 py-2 rounded-lg hover:brightness-110 flex items-center gap-2 disabled:opacity-50">
-                                  {loadingMolecule ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
-                                  Generate
-                              </button>
-                          </form>
-                      </div>
-                      <div className="flex gap-2">
-                           <button onClick={() => setShowConditions(!showConditions)} className={`p-2 rounded-lg border ${showConditions ? 'bg-skin-primary text-white border-skin-primary' : 'bg-skin-base border-skin-border text-skin-main hover:bg-skin-border'} transition-colors`} title="Reaction Conditions">
-                               <Thermometer size={20} />
-                           </button>
-                           <button onClick={handleSaveToArchive} className="p-2 rounded-lg bg-skin-base border border-skin-border text-skin-main hover:bg-skin-border transition-colors" title="Save to Archive"><Save size={20} /></button>
-                      </div>
-                  </div>
-                  
-                  {/* Reaction Conditions Toolbar */}
-                  {showConditions && (
-                      <div className="bg-skin-surface border-b border-skin-border p-3 flex gap-4 items-center animate-slide-up z-10 shadow-sm">
-                           <div className="flex items-center gap-2">
-                               <Flame size={16} className="text-red-500"/>
-                               <label className="text-xs font-bold text-skin-muted">Temp (C)</label>
-                               <input type="number" value={reactionTemp} onChange={(e) => setReactionTemp(parseInt(e.target.value))} className="w-16 p-1 border border-skin-border rounded bg-skin-base text-sm"/>
-                           </div>
-                           <div className="flex items-center gap-2">
-                               <Gauge size={16} className="text-blue-500"/>
-                               <label className="text-xs font-bold text-skin-muted">Press (atm)</label>
-                               <input type="number" value={reactionPressure} onChange={(e) => setReactionPressure(parseFloat(e.target.value))} className="w-16 p-1 border border-skin-border rounded bg-skin-base text-sm"/>
-                           </div>
-                           <div className="flex items-center gap-2">
-                               <Droplets size={16} className="text-cyan-500"/>
-                               <label className="text-xs font-bold text-skin-muted">Solvent</label>
-                               <input value={reactionSolvent} onChange={(e) => setReactionSolvent(e.target.value)} className="w-24 p-1 border border-skin-border rounded bg-skin-base text-sm"/>
-                           </div>
-                           <form onSubmit={handleApplyReaction} className="flex gap-2 ml-auto">
-                               <input 
-                                    value={reactionReagentInput} 
-                                    onChange={(e) => setReactionReagentInput(e.target.value)} 
-                                    placeholder="Add Reagent (e.g. HBr)" 
-                                    className="px-3 py-1 border border-skin-border rounded bg-skin-base text-sm w-48"
-                               />
-                               <button type="submit" className="bg-purple-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-purple-700">React</button>
-                           </form>
-                      </div>
-                  )}
-
-                  <div className="flex-1 relative bg-skin-sidebar-bg">
-                      <MoleculeVisualizer data={moleculeData} loading={loadingMolecule} onAnalyze={handleAnalyzeMolecule} />
-                      
-                      {/* Floating Chat Overlay */}
-                      <div className="absolute bottom-6 right-6 w-96 h-96 shadow-2xl rounded-xl z-30 animate-enter">
-                          {renderChatComponent(true)}
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          {view === AppView.QUIZ_ARENA && (
-              <div className="p-8 h-full overflow-y-auto animate-fade-in flex flex-col items-center">
-                  <div className="w-full max-w-2xl">
-                      <div className="text-center mb-8">
-                          <h2 className="text-3xl font-bold text-skin-main mb-2">Quiz Arena</h2>
-                          <p className="text-skin-muted">Test your mastery of {activeModuleId ? "module concepts" : "organic chemistry"}.</p>
-                      </div>
-
-                      {!quizData ? (
-                          <div className="bg-skin-surface p-8 rounded-2xl shadow-lg border border-skin-border text-center">
-                              <Zap size={48} className="mx-auto text-amber-500 mb-4" />
-                              <h3 className="text-xl font-bold text-skin-main mb-4">Ready to Challenge Yourself?</h3>
-                              
-                              <div className="mb-6">
-                                  <label className="block text-left text-sm font-bold text-skin-muted mb-2">Select Topic</label>
-                                  <select 
-                                    value={quizTopic} 
-                                    onChange={(e) => setQuizTopic(e.target.value)}
-                                    className="w-full p-3 bg-skin-base border border-skin-border rounded-xl text-skin-main"
-                                  >
-                                      {modules.map(m => (
-                                          <option key={m.id} value={m.topic}>{m.topic}</option>
-                                      ))}
-                                  </select>
-                              </div>
-                              
-                              <button 
-                                onClick={() => startQuiz()} 
-                                disabled={loadingQuiz}
-                                className="w-full bg-skin-primary text-white py-3 rounded-xl font-bold text-lg hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                              >
-                                  {loadingQuiz ? <Loader2 className="animate-spin"/> : <Play fill="currentColor"/>} Start Quiz
-                              </button>
-                          </div>
-                      ) : !quizCompleted ? (
-                          <div className="bg-skin-surface p-8 rounded-2xl shadow-lg border border-skin-border animate-enter">
-                              <div className="flex justify-between items-center mb-6">
-                                  <span className="text-sm font-bold text-skin-muted">Question {currentQuestionIdx + 1} of {quizData.questions.length}</span>
-                                  <span className="text-sm font-bold text-skin-primary bg-skin-primary-light px-3 py-1 rounded-full">Score: {quizScore}</span>
-                              </div>
-                              
-                              <h3 className="text-xl font-bold text-skin-main mb-6">{quizData.questions[currentQuestionIdx].question}</h3>
-                              
-                              {quizData.questions[currentQuestionIdx].type === 'mcq' ? (
-                                  <div className="space-y-3 mb-6">
-                                      {quizData.questions[currentQuestionIdx].options?.map((opt, i) => (
-                                          <button
-                                              key={i}
-                                              onClick={() => handleQuizAnswerMCQ(i)}
-                                              className={`w-full p-4 text-left rounded-xl border transition-all ${
-                                                  showExplanation 
-                                                    ? opt === quizData.questions[currentQuestionIdx].correctAnswer 
-                                                        ? 'bg-emerald-100 border-emerald-500 text-emerald-800'
-                                                        : selectedOption === i 
-                                                            ? 'bg-red-100 border-red-500 text-red-800'
-                                                            : 'bg-skin-base border-skin-border opacity-50'
-                                                    : 'bg-skin-base border-skin-border hover:border-skin-primary hover:bg-skin-surface'
-                                              }`}
-                                          >
-                                              <span className="font-bold mr-2">{String.fromCharCode(65 + i)}.</span> {opt}
-                                          </button>
-                                      ))}
-                                  </div>
-                              ) : (
-                                  <form onSubmit={handleQuizAnswerText} className="mb-6">
-                                      <input 
-                                        value={textAnswer}
-                                        onChange={(e) => setTextAnswer(e.target.value)}
-                                        disabled={showExplanation}
-                                        placeholder="Type your answer..."
-                                        className="w-full p-4 bg-skin-base border border-skin-border rounded-xl text-skin-main focus:ring-2 focus:ring-skin-primary outline-none"
-                                      />
-                                      {!showExplanation && <button type="submit" className="mt-2 text-skin-primary font-bold text-sm hover:underline">Submit Answer</button>}
-                                  </form>
-                              )}
-
-                              {showExplanation && (
-                                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 animate-fade-in">
-                                      <h4 className="font-bold text-blue-800 mb-1 flex items-center gap-2"><BookOpen size={16}/> Explanation</h4>
-                                      <p className="text-blue-900 text-sm">{quizData.questions[currentQuestionIdx].explanation}</p>
-                                      <p className="text-xs text-blue-700 mt-2 font-mono">Correct Answer: {quizData.questions[currentQuestionIdx].correctAnswer}</p>
-                                  </div>
-                              )}
-
-                              {showExplanation && (
-                                  <button onClick={nextQuestion} className="w-full bg-skin-primary text-white py-3 rounded-xl font-bold hover:brightness-110 flex items-center justify-center gap-2">
-                                      {currentQuestionIdx < quizData.questions.length - 1 ? 'Next Question' : 'Finish Quiz'} <ArrowRight size={18}/>
-                                  </button>
-                              )}
-                          </div>
-                      ) : (
-                          <div className="bg-skin-surface p-8 rounded-2xl shadow-lg border border-skin-border text-center animate-pop">
-                              <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg text-white">
-                                  <Award size={40} />
-                              </div>
-                              <h2 className="text-3xl font-bold text-skin-main mb-2">Quiz Complete!</h2>
-                              <p className="text-xl text-skin-muted mb-6">You scored <span className="text-skin-primary font-bold">{Math.round((quizScore / quizData.questions.length) * 100)}%</span></p>
-                              
-                              <div className="grid grid-cols-2 gap-4 mb-8">
-                                  <div className="p-4 bg-skin-base rounded-xl border border-skin-border">
-                                      <div className="text-2xl font-bold text-emerald-500">{quizScore}</div>
-                                      <div className="text-xs text-skin-muted uppercase font-bold">Correct</div>
-                                  </div>
-                                  <div className="p-4 bg-skin-base rounded-xl border border-skin-border">
-                                      <div className="text-2xl font-bold text-red-500">{quizData.questions.length - quizScore}</div>
-                                      <div className="text-xs text-skin-muted uppercase font-bold">Incorrect</div>
-                                  </div>
-                              </div>
-                              
-                              <button onClick={() => startQuiz()} className="bg-skin-primary text-white px-8 py-3 rounded-xl font-bold hover:brightness-110 shadow-lg">Try Another</button>
-                          </div>
-                      )}
-                  </div>
-              </div>
-          )}
-
-          {view === AppView.REACTION_TUTOR && (
-             <div className="p-8 h-full overflow-y-auto animate-fade-in flex flex-col items-center">
-                 <div className="w-full max-w-4xl">
-                     <div className="text-center mb-8">
-                          <h2 className="text-3xl font-bold text-skin-main mb-2">Reaction Mechanism Tutor</h2>
-                          <p className="text-skin-muted">Master step-by-step organic mechanisms with AI verification.</p>
-                      </div>
-                      
-                      <div className="bg-skin-surface p-6 rounded-xl border border-skin-border shadow-sm mb-8">
-                          <form onSubmit={handleReactionSearch} className="flex gap-4">
-                              <input 
-                                value={reactionInput}
-                                onChange={(e) => setReactionInput(e.target.value)}
-                                className="flex-1 px-4 py-3 bg-skin-base border border-skin-border rounded-xl text-skin-main focus:ring-2 focus:ring-skin-primary outline-none"
-                                placeholder="Describe a reaction (e.g. Acid catalyzed hydration of propene)..."
-                              />
-                              <button type="submit" disabled={loadingReaction} className="bg-skin-primary text-white px-6 py-3 rounded-xl font-bold hover:brightness-110 disabled:opacity-50">
-                                  {loadingReaction ? <Loader2 className="animate-spin"/> : "Explain Mechanism"}
-                              </button>
-                          </form>
-                      </div>
-                      
-                      {reactionData && (
-                          <div className="space-y-6 animate-slide-up">
-                               {reactionData.steps.map((step, idx) => (
-                                   <div key={idx} className="bg-skin-surface p-6 rounded-xl border border-skin-border shadow-sm relative overflow-hidden group hover:border-skin-primary transition-colors">
-                                       <div className="absolute top-0 left-0 w-1.5 h-full bg-skin-primary"></div>
-                                       <div className="flex gap-4">
-                                           <div className="w-10 h-10 rounded-full bg-skin-primary-light text-skin-primary flex items-center justify-center font-bold text-lg shrink-0 border border-skin-primary/20">
-                                               {step.step}
-                                           </div>
-                                           <div>
-                                               <h4 className="text-lg font-bold text-skin-main mb-2">{step.keyConcept}</h4>
-                                               <p className="text-skin-sidebar-text leading-relaxed">{step.description}</p>
-                                           </div>
-                                       </div>
-                                   </div>
-                               ))}
-                               
-                               {reactionData.references && (
-                                   <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-xs text-slate-500">
-                                       <strong className="block mb-2 text-slate-700">References:</strong>
-                                       <ul className="list-disc pl-4 space-y-1">
-                                           {reactionData.references.map((ref, i) => <li key={i}>{ref}</li>)}
-                                       </ul>
-                                   </div>
-                               )}
-                          </div>
-                      )}
-                 </div>
-             </div>
-          )}
-
-          {view === AppView.REACTION_SIMULATOR && (
-            <div className="h-full overflow-y-auto p-5 md:p-8 animate-fade-in">
-              <div className="mx-auto max-w-7xl">
-                <div className="mb-8">
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-skin-primary-light px-3 py-1 text-xs font-bold uppercase tracking-widest text-skin-primary">
-                    <Combine size={14} /> Gemini reaction prediction
-                  </div>
-                  <h2 className="text-3xl font-bold text-skin-main">Two-reactant simulator</h2>
-                  <p className="mt-2 max-w-2xl text-skin-muted">Combine names, formulas, or SMILES and inspect the predicted major product. Results are educational hypotheses, not laboratory procedures.</p>
+            <>
+              <PageHeading
+                title="Molecule lab"
+                description="Read bond orders, preserve formal charges, and separate structure from geometry."
+              >
+                <Button secondary onClick={save} disabled={!molecule}>
+                  <Bookmark size={16} /> Save structure
+                </Button>
+              </PageHeading>
+              <form
+                className="molecule-search"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void loadMolecule();
+                }}
+              >
+                <label htmlFor="molecule-input">Molecule name or SMILES</label>
+                <div className="input-action">
+                  <input
+                    id="molecule-input"
+                    value={molInput}
+                    onChange={(e) => setMolInput(e.target.value)}
+                    placeholder="Benzene, water, or smiles:CCO"
+                    required
+                  />
+                  <button className="button" disabled={molLoading}>
+                    {molLoading ? (
+                      <Loader2 size={17} className="spin" />
+                    ) : (
+                      <Search size={17} />
+                    )}{" "}
+                    Inspect structure
+                  </button>
                 </div>
-
-                <form onSubmit={handleReactionSimulation} className="mb-7 rounded-2xl border border-skin-border bg-skin-surface p-5 shadow-sm md:p-6">
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-end">
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-bold text-skin-main">Reactant A</span>
-                      <input value={reactantA} onChange={(event) => setReactantA(event.target.value)} placeholder="e.g. ethanoic acid" className="w-full rounded-xl border border-skin-border bg-skin-base px-4 py-3 text-skin-main outline-none focus:ring-2 focus:ring-skin-primary" />
-                    </label>
-                    <div className="hidden h-12 w-12 items-center justify-center rounded-full bg-skin-primary-light text-skin-primary md:flex"><Combine size={22} /></div>
-                    <label className="block">
-                      <span className="mb-2 block text-sm font-bold text-skin-main">Reactant B</span>
-                      <input value={reactantB} onChange={(event) => setReactantB(event.target.value)} placeholder="e.g. ethanol" className="w-full rounded-xl border border-skin-border bg-skin-base px-4 py-3 text-skin-main outline-none focus:ring-2 focus:ring-skin-primary" />
-                    </label>
-                  </div>
-
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <label className="text-sm font-semibold text-skin-muted">Temperature (°C)<input type="number" value={reactionTemp} onChange={(event) => setReactionTemp(Number(event.target.value))} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
-                    <label className="text-sm font-semibold text-skin-muted">Pressure (atm)<input type="number" min="0" step="0.1" value={reactionPressure} onChange={(event) => setReactionPressure(Number(event.target.value))} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
-                    <label className="text-sm font-semibold text-skin-muted">Catalyst<input value={reactionCatalyst} onChange={(event) => setReactionCatalyst(event.target.value)} placeholder="optional" className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
-                    <label className="text-sm font-semibold text-skin-muted">Solvent<input value={reactionSolvent} onChange={(event) => setReactionSolvent(event.target.value)} className="mt-2 w-full rounded-lg border border-skin-border bg-skin-base px-3 py-2 text-skin-main" /></label>
-                  </div>
-
-                  <button type="submit" disabled={simulationLoading || !reactantA.trim() || !reactantB.trim()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-skin-primary px-6 py-3 font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
-                    {simulationLoading ? <Loader2 className="animate-spin" size={19} /> : <Combine size={19} />}
-                    {simulationLoading ? 'Predicting product…' : 'Predict major product'}
+                <p className="fine-print">
+                  Reference examples open instantly. Use “smiles:” for a
+                  supplied structure; other names use the AI service.
+                </p>
+              </form>
+              <div className="example-row">
+                {[
+                  "Benzene",
+                  "Methane",
+                  "Water",
+                  "Ammonia",
+                  "Carbon dioxide",
+                  "Ethene",
+                  "Nitrobenzene",
+                ].map((name) => (
+                  <button key={name} onClick={() => void loadMolecule(name)}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+              <div className="lab-layout">
+                <MoleculeVisualizer
+                  data={molecule}
+                  loading={molLoading}
+                  onAnalyze={(value) => {
+                    setMolecule(value);
+                    setMolInput("smiles:" + value.smiles);
+                  }}
+                />
+                {molecule && <MoleculeFacts data={molecule} />}
+              </div>
+              <details className="reaction-on-structure">
+                <summary>Explore a reaction with this structure</summary>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!molecule || !reagent.trim()) return;
+                    const request = ++moleculeRequest.current;
+                    setMolLoading(true);
+                    setError("");
+                    try {
+                      const value = await gemini.applyReaction(
+                        molecule,
+                        reagent,
+                        conditions,
+                      );
+                      if (request === moleculeRequest.current)
+                        setMolecule(value);
+                    } catch (err) {
+                      if (request === moleculeRequest.current)
+                        setError(getError(err));
+                    } finally {
+                      if (request === moleculeRequest.current)
+                        setMolLoading(false);
+                    }
+                  }}
+                >
+                  <label>
+                    Reagent
+                    <input
+                      value={reagent}
+                      onChange={(e) => setReagent(e.target.value)}
+                      placeholder="e.g. hydroxide"
+                      required
+                    />
+                  </label>
+                  <Conditions value={conditions} onChange={updateConditions} />
+                  <button className="button" disabled={molLoading}>
+                    Predict transformed structure <ArrowRight size={16} />
                   </button>
                 </form>
-
-                {simulation && (
-                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)] animate-slide-up">
-                    <div className="min-h-[520px] overflow-hidden rounded-2xl border border-skin-border bg-skin-sidebar-bg shadow-xl">
-                      <MoleculeVisualizer data={simulation.product} loading={false} />
-                    </div>
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-skin-border bg-skin-surface p-6 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div><p className="text-xs font-bold uppercase tracking-widest text-skin-muted">Predicted product</p><h3 className="mt-1 text-2xl font-bold text-skin-main">{simulation.product.name}</h3></div>
-                          <span className="rounded-full bg-skin-primary-light px-3 py-1 text-xs font-bold uppercase text-skin-primary">{simulation.confidence} confidence</span>
-                        </div>
-                        <p className="mt-4 rounded-xl bg-skin-base p-4 font-mono text-sm text-skin-main">{simulation.equation}</p>
-                        <p className="mt-4 text-sm font-bold text-skin-primary">{simulation.reactionType}</p>
-                        <p className="mt-2 leading-relaxed text-skin-muted">{simulation.explanation}</p>
-                      </div>
-                      <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
-                        <ShieldAlert className="mt-0.5 shrink-0" size={22} />
-                        <div><h4 className="font-bold">Safety check</h4><p className="mt-1 text-sm leading-relaxed">{simulation.safetyNote}</p></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+              </details>
+            </>
           )}
-
-          {view === AppView.STUDY_HUB && (
-              <div className="p-8 h-full overflow-y-auto animate-fade-in">
-                  <div className="flex justify-between items-end mb-8">
-                      <div>
-                          <h2 className="text-3xl font-bold text-skin-main">Study Hub</h2>
-                          <p className="text-skin-muted mt-2">Access comprehensive guides and resources for your curriculum.</p>
-                      </div>
+          {view === AppView.REACTION_SIMULATOR && (
+            <>
+              <PageHeading
+                title="Reaction simulator"
+                description="Combine two inputs, state the conditions, and examine a proposed product."
+              />
+              <div className="reaction-layout">
+                <form className="reaction-form" onSubmit={predict}>
+                  <h2>Set up a prediction</h2>
+                  <label>
+                    First reactant
+                    <input
+                      value={a}
+                      disabled={simLoading}
+                      onChange={(e) => {
+                        invalidateSimulation();
+                        setA(e.target.value);
+                      }}
+                      required
+                      placeholder="Name or SMILES"
+                    />
+                  </label>
+                  <div className="reactant-plus">
+                    <Plus size={18} />
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {modules.map(module => (
-                          <div key={module.id} onClick={() => handleSelectStudyHubModule(module)} className="bg-skin-surface p-6 rounded-xl border border-skin-border hover:border-skin-primary hover:shadow-md transition-all cursor-pointer group">
-                              <div className="flex justify-between items-start mb-4">
-                                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${module.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-skin-primary-light text-skin-primary'}`}>
-                                      {module.status === 'completed' ? <CheckCircle size={24}/> : <Book size={24}/>}
-                                  </div>
-                                  <span className="text-xs font-bold text-skin-muted bg-skin-base px-2 py-1 rounded border border-skin-border">{module.id.toUpperCase()}</span>
-                              </div>
-                              <h3 className="font-bold text-lg text-skin-main mb-2 group-hover:text-skin-primary transition-colors">{module.title}</h3>
-                              <p className="text-sm text-skin-muted line-clamp-2">{module.description}</p>
-                              
-                              <div className="mt-4 pt-4 border-t border-skin-border flex items-center justify-between text-sm">
-                                  <span className="text-skin-muted font-medium">{module.topic}</span>
-                                  <ArrowRight size={16} className="text-skin-primary opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0"/>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-
-                  <section className="mt-10 rounded-2xl border border-skin-border bg-skin-surface p-6 shadow-sm">
-                    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-skin-primary">Connected research workflows</p>
-                        <h3 className="mt-1 text-2xl font-bold text-skin-main">DeepMind Science Skills</h3>
-                        <p className="mt-2 max-w-3xl text-sm text-skin-muted">Open source-backed workflows for compound verification, bioactivity research, structure lookup, and molecular visualization.</p>
-                      </div>
-                      <a href="https://github.com/google-deepmind/science-skills" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-skin-primary hover:underline"><Github size={17} /> View repository</a>
+                  <label>
+                    Second reactant
+                    <input
+                      value={b}
+                      disabled={simLoading}
+                      onChange={(e) => {
+                        invalidateSimulation();
+                        setB(e.target.value);
+                      }}
+                      required
+                      placeholder="Name or SMILES"
+                    />
+                  </label>
+                  <Conditions
+                    value={conditions}
+                    onChange={updateConditions}
+                    disabled={simLoading}
+                  />
+                  <button className="button" disabled={simLoading}>
+                    {simLoading ? (
+                      <Loader2 size={17} className="spin" />
+                    ) : (
+                      <Combine size={17} />
+                    )}{" "}
+                    Predict product
+                  </button>
+                  <p className="fine-print">
+                    Conditions matter. AI confidence is self-assessed; it is not
+                    an experimental probability.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={simLoading}
+                    className="text-link"
+                    onClick={() => {
+                      setA("bromomethane");
+                      setB("hydroxide");
+                      updateConditions({
+                        temp: 25,
+                        pressure: 1,
+                        catalyst: "none",
+                        solvent: "water",
+                      });
+                      setSimulation(null);
+                    }}
+                  >
+                    Try a substitution example
+                  </button>
+                </form>
+                <section className="reaction-result" aria-live="polite">
+                  {simLoading ? (
+                    <div className="loading-state">
+                      <Loader2 size={24} className="spin" />
+                      <p>Considering the reactants and conditions…</p>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      {SCIENCE_SKILLS.map((skill) => (
-                        <a key={skill.name} href={skill.href} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-skin-border bg-skin-base transition hover:-translate-y-1 hover:border-skin-primary hover:shadow-lg">
-                          <div className={`h-1.5 bg-gradient-to-r ${skill.accent}`} />
-                          <div className="p-4">
-                            <div className="flex items-center justify-between gap-2"><h4 className="font-bold text-skin-main">{skill.name}</h4><ExternalLink size={16} className="text-skin-muted group-hover:text-skin-primary" /></div>
-                            <p className="mt-2 text-sm leading-relaxed text-skin-muted">{skill.description}</p>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </section>
-
-                  {selectedStudyModule && (
-                      <div className="fixed inset-0 z-50 flex justify-end">
-                         <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setSelectedStudyModule(null)}></div>
-                         <div className="relative w-full max-w-2xl bg-skin-surface h-full shadow-2xl p-8 overflow-y-auto border-l border-skin-border animate-slide-up">
-                              <button onClick={() => setSelectedStudyModule(null)} className="absolute top-6 right-6 p-2 rounded-full hover:bg-skin-base"><X size={20}/></button>
-                              <h2 className="text-3xl font-bold text-skin-main mb-1">{selectedStudyModule.title}</h2>
-                              <p className="text-skin-muted mb-6 text-lg">{selectedStudyModule.description}</p>
-                              
-                              {loadingStudy ? (
-                                  <div className="flex justify-center py-20"><Loader2 className="animate-spin w-10 h-10 text-skin-primary"/></div>
-                              ) : studyGuide ? (
-                                   <div className="space-y-8 animate-fade-in">
-                                       <div className="prose prose-sm max-w-none text-skin-sidebar-text">
-                                           <h3 className="text-xl font-bold text-skin-main mb-2">Topic Summary</h3>
-                                           <div className="bg-skin-base p-6 rounded-xl border border-skin-border leading-relaxed">
-                                               {studyGuide.summary}
-                                           </div>
-                                       </div>
-
-                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-emerald-50/50 border border-emerald-100 p-5 rounded-xl">
-                                                <h4 className="font-bold text-emerald-800 mb-3 flex items-center gap-2"><CheckCircle size={18}/> Key Points</h4>
-                                                <ul className="space-y-2">
-                                                    {studyGuide.keyPoints.map((kp, i) => (
-                                                        <li key={i} className="text-sm text-emerald-900 flex gap-2">
-                                                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span> {kp}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                            <div className="bg-amber-50/50 border border-amber-100 p-5 rounded-xl">
-                                                <h4 className="font-bold text-amber-800 mb-3 flex items-center gap-2"><AlertTriangle size={18}/> Common Mistakes</h4>
-                                                <ul className="space-y-2">
-                                                    {studyGuide.commonMistakes.map((cm, i) => (
-                                                        <li key={i} className="text-sm text-amber-900 flex gap-2">
-                                                             <X size={14} className="mt-0.5 text-amber-500 shrink-0"/> {cm}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                       </div>
-
-                                       <Flashcards cards={studyGuide.flashcards} topic={selectedStudyModule.topic} />
-
-                                       <div>
-                                           <h3 className="text-xl font-bold text-skin-main mb-4">Curated Resources</h3>
-                                           <div className="grid gap-4">
-                                               {studyGuide.resources.map((res, i) => (
-                                                   <a key={i} href={res.url} target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 rounded-xl border border-skin-border bg-skin-surface hover:border-skin-primary hover:shadow-lg transition-all group">
-                                                       <div className="w-12 h-12 rounded-lg bg-skin-primary-light flex items-center justify-center text-skin-primary group-hover:scale-110 transition-transform">
-                                                           {res.source === 'YouTube' ? <Video size={24}/> : <BookOpen size={24}/>}
-                                                       </div>
-                                                       <div className="flex-1">
-                                                           <h4 className="font-bold text-skin-main text-lg group-hover:text-skin-primary transition-colors">{res.title}</h4>
-                                                           <p className="text-sm text-skin-muted">{res.source} • <span className="text-skin-primary font-medium">Click to open</span></p>
-                                                       </div>
-                                                       <ExternalLink size={20} className="text-skin-muted group-hover:text-skin-primary"/>
-                                                   </a>
-                                               ))}
-                                           </div>
-                                       </div>
-                                   </div>
-                              ) : (
-                                  <div className="text-center py-10">
-                                      <p className="text-skin-muted">Select a module to view study materials.</p>
-                                  </div>
-                              )}
-                         </div>
+                  ) : simulation ? (
+                    <>
+                      <div className="section-heading">
+                        <h2>
+                          {simulation.assessment === "no-reaction"
+                            ? "No reaction predicted"
+                            : simulation.product.name}
+                        </h2>
+                        <span className="tag copper">AI prediction</span>
                       </div>
+                      <div className="reaction-equation">
+                        {simulation.equation}
+                      </div>
+                      <p>{simulation.explanation}</p>
+                      <div className="prediction-meta">
+                        <span>{simulation.reactionType}</span>
+                        <span>Model confidence: {simulation.confidence}</span>
+                      </div>
+                      <div
+                        className={
+                          "notice " +
+                          (simulation.assessment === "balanced"
+                            ? "success"
+                            : "caution")
+                        }
+                      >
+                        {simulation.balanceNote}
+                      </div>
+                      {simulation.assessment !== "no-reaction" && (
+                        <MoleculeVisualizer
+                          data={simulation.product}
+                          loading={false}
+                        />
+                      )}
+                      <p className="fine-print">{simulation.safetyNote}</p>
+                      {simulation.assessment !== "no-reaction" && (
+                        <Button
+                          secondary
+                          onClick={() => {
+                            setMolecule(simulation.product);
+                            setMolInput(simulation.product.name);
+                            navigate(AppView.MOLECULE_VIEWER);
+                          }}
+                        >
+                          Inspect product <ArrowRight size={16} />
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="empty-state reaction-empty">
+                      <FlaskConical size={36} />
+                      <h2>What could form?</h2>
+                      <p>
+                        The product, equation, and reasoning will appear here. A
+                        molecule passing a graph check does not prove that the
+                        reaction occurs.
+                      </p>
+                      <div className="example-equation">
+                        acid + alcohol ⇌ ester + water
+                      </div>
+                      <p className="fine-print">
+                        Illustrative reaction class; acid catalysis and suitable
+                        conditions are needed.
+                      </p>
+                    </div>
                   )}
+                </section>
               </div>
+            </>
           )}
-
+          {view === AppView.REACTION_TUTOR && (
+            <>
+              <PageHeading
+                title="Mechanism tutor"
+                description="Follow electron movement and understand why each step happens."
+              />
+              <form
+                className="molecule-search"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setMechLoading(true);
+                  setMechanism(null);
+                  setError("");
+                  try {
+                    setMechanism(
+                      await gemini.generateReactionSteps(mechanismQuery),
+                    );
+                  } catch (err) {
+                    setError(getError(err));
+                  } finally {
+                    setMechLoading(false);
+                  }
+                }}
+              >
+                <label htmlFor="mechanism-query">Reaction or mechanism</label>
+                <div className="input-action">
+                  <input
+                    id="mechanism-query"
+                    value={mechanismQuery}
+                    onChange={(e) => setMechanismQuery(e.target.value)}
+                    required
+                  />
+                  <button className="button" disabled={mechLoading}>
+                    {mechLoading ? (
+                      <Loader2 size={17} className="spin" />
+                    ) : (
+                      <BookOpen size={17} />
+                    )}{" "}
+                    Explain mechanism
+                  </button>
+                </div>
+              </form>
+              {mechanism ? (
+                <article className="mechanism-article">
+                  <div className="section-heading">
+                    <h2>{mechanism.name}</h2>
+                    <span className="tag copper">AI explanation</span>
+                  </div>
+                  <ol className="mechanism-steps">
+                    {mechanism.steps.map((step) => (
+                      <li key={step.step}>
+                        <h3>{step.keyConcept}</h3>
+                        <p>{step.description}</p>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="fine-print">
+                    The mechanism is model-generated and is not automatically
+                    fact-checked. For SN2, compare the textbook account below.
+                  </p>
+                  <SourceList
+                    sources={[
+                      {
+                        title: "Characteristics of the SN2 reaction",
+                        source: "OpenStax Organic Chemistry",
+                        url: "https://openstax.org/books/organic-chemistry/pages/11-3-characteristics-of-the-sn2-reaction",
+                      },
+                    ]}
+                  />
+                </article>
+              ) : (
+                <div className="empty-state">
+                  <h2>From reactants to reasoning</h2>
+                  <p>
+                    Specify the substrate, reagent, and conditions for a useful
+                    explanation.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+          {view === AppView.QUIZ_ARENA && (
+            <>
+              <PageHeading
+                title="Practice questions"
+                description="Check your understanding against the active module’s core ideas."
+              />
+              <div className="practice-layout">
+                <aside className="practice-context">
+                  <h2>{selected.title}</h2>
+                  <p>
+                    {course.name} / {selected.level}
+                  </p>
+                  <label>
+                    Practice module
+                    <select
+                      value={selected.id}
+                      disabled={quizLoading || (!!quiz && !quizDone)}
+                      onChange={(e) => {
+                        selectModule(e.target.value);
+                      }}
+                    >
+                      {course.modules.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.code} — {m.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="fine-print">
+                    AI-generated practice, not official examination questions.
+                    Scores are stored locally.
+                  </p>
+                </aside>
+                <section className="quiz-panel">
+                  {!quiz ? (
+                    <div className="empty-state">
+                      <h2>Make the ideas stick</h2>
+                      <p>
+                        Generate five multiple-choice questions based on this
+                        module’s notes.
+                      </p>
+                      <Button
+                        onClick={() => void startQuiz()}
+                        disabled={quizLoading}
+                      >
+                        {quizLoading ? (
+                          <Loader2 size={17} className="spin" />
+                        ) : (
+                          <Pencil size={17} />
+                        )}{" "}
+                        Generate practice set
+                      </Button>
+                    </div>
+                  ) : quizDone ? (
+                    <div className="quiz-finish">
+                      <Check size={30} />
+                      <h2>Practice complete</h2>
+                      <div className="quiz-result-score">
+                        {score} / {quiz.questions.length}
+                      </div>
+                      <p>
+                        {Math.round((score / quiz.questions.length) * 100)}%
+                        correct. Revisit the source notes to work through missed
+                        ideas.
+                      </p>
+                      <Button onClick={() => void startQuiz()}>
+                        New practice set
+                      </Button>
+                      <Button
+                        secondary
+                        onClick={() => navigate(AppView.STUDY_HUB)}
+                      >
+                        Return to notes
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="question-position">
+                        <span>
+                          Question {quizIndex + 1} of {quiz.questions.length}
+                        </span>
+                        <span>{score} correct</span>
+                      </div>
+                      <progress
+                        value={quizIndex + 1}
+                        max={quiz.questions.length}
+                        aria-label="Question progress"
+                      />
+                      <h2>{quiz.questions[quizIndex].question}</h2>
+                      <div className="quiz-options">
+                        {quiz.questions[quizIndex].options?.map((option, i) => (
+                          <button
+                            key={option}
+                            disabled={answer !== null}
+                            className={
+                              "quiz-option" +
+                              (answer !== null &&
+                              option === quiz.questions[quizIndex].correctAnswer
+                                ? " correct"
+                                : answer === option
+                                  ? " incorrect"
+                                  : "")
+                            }
+                            onClick={() => {
+                              setAnswer(option);
+                              if (
+                                option ===
+                                quiz.questions[quizIndex].correctAnswer
+                              )
+                                setScore((s) => s + 1);
+                            }}
+                          >
+                            <span>{String.fromCharCode(65 + i)}</span>
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                      {answer !== null && (
+                        <div className="answer-explanation">
+                          <h3>
+                            {answer === quiz.questions[quizIndex].correctAnswer
+                              ? "Correct"
+                              : "Review this idea"}
+                          </h3>
+                          <p>{quiz.questions[quizIndex].explanation}</p>
+                          <p>
+                            Answer: {quiz.questions[quizIndex].correctAnswer}
+                          </p>
+                          <Button onClick={nextQuestion}>
+                            {quizIndex === quiz.questions.length - 1
+                              ? "Finish practice"
+                              : "Next question"}{" "}
+                            <ArrowRight size={16} />
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </section>
+              </div>
+            </>
+          )}
           {view === AppView.CHAT_TUTOR && (
-              <div className="h-full p-8 animate-fade-in max-w-4xl mx-auto w-full">
-                   {renderChatComponent()}
+            <>
+              <PageHeading
+                title="Ask a chemistry tutor"
+                description={
+                  "Explore a question in the context of " +
+                  selected.title.toLowerCase() +
+                  "."
+                }
+              />
+              <div className="chat-workspace">
+                <div className="chat-context">
+                  <BookOpen size={17} />
+                  <span>{selected.title}</span>
+                  <span className="tag">AI conversation</span>
+                </div>
+                <div className="chat-messages">
+                  {messages.length === 0 && (
+                    <div className="empty-state">
+                      <h2>Start with a question</h2>
+                      <p>
+                        Ask for an explanation, a comparison, or help spotting
+                        an error in your reasoning.
+                      </p>
+                      <button
+                        className="question-suggestion"
+                        onClick={() =>
+                          setChatInput(
+                            "How can I distinguish molecular shape from electron-domain geometry?",
+                          )
+                        }
+                      >
+                        How is molecular shape different from electron-domain
+                        geometry?
+                      </button>
+                    </div>
+                  )}
+                  {messages.map((message, i) => (
+                    <div className={"chat-message " + message.role} key={i}>
+                      <span>{message.role === "user" ? "You" : "Tutor"}</span>
+                      <p>{message.text}</p>
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <p className="loading-state" role="status">
+                      <Loader2 size={18} className="spin" /> Preparing an
+                      explanation…
+                    </p>
+                  )}
+                  <div ref={chatEnd} />
+                </div>
+                <form className="chat-compose" onSubmit={sendChat}>
+                  <label className="sr-only" htmlFor="chat-input">
+                    Your chemistry question
+                  </label>
+                  <input
+                    id="chat-input"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask a chemistry question…"
+                    required
+                  />
+                  <button
+                    className="button"
+                    disabled={chatLoading || !chatInput.trim()}
+                  >
+                    Send <ArrowRight size={17} />
+                  </button>
+                </form>
+                <p className="fine-print">
+                  AI explanations can contain errors. Compare factual claims
+                  with your module’s cited sources.
+                </p>
               </div>
+            </>
           )}
-
+          {view === AppView.ARCHIVE && (
+            <>
+              <PageHeading
+                title="Saved structures"
+                description="Your collection, stored in this browser."
+              />
+              {archive.length ? (
+                <div className="archive-list">
+                  {archive.map((item) => (
+                    <div className="saved-structure" key={item.id}>
+                      <Atom size={23} />
+                      <div>
+                        <h2>{item.name}</h2>
+                        <p>
+                          {new Date(item.timestamp).toLocaleDateString()} ·{" "}
+                          {item.data.formula || "Custom graph"}
+                        </p>
+                      </div>
+                      <Button
+                        secondary
+                        onClick={() => {
+                          setMolecule(item.data);
+                          setMolInput(item.name);
+                          navigate(AppView.MOLECULE_VIEWER);
+                        }}
+                      >
+                        Open <ArrowRight size={15} />
+                      </Button>
+                      <button
+                        className="icon-button"
+                        aria-label={
+                          "Remove " + item.name + " from saved structures"
+                        }
+                        onClick={() => {
+                          setArchive((items) =>
+                            items.filter((a) => a.id !== item.id),
+                          );
+                          setNotice(
+                            "Structure removed from this browser’s collection.",
+                          );
+                        }}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Library size={36} />
+                  <h2>Build your collection</h2>
+                  <p>
+                    Open a molecule and save its structure to revisit it here.
+                  </p>
+                  <Button onClick={() => navigate(AppView.MOLECULE_VIEWER)}>
+                    Explore molecules <ArrowRight size={16} />
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+          <footer className="workspace-footer">
+            <span>CarbonCanvas</span>
+            <span>
+              {course.shortName} · {course.version}
+            </span>
+            <button
+              onClick={() => {
+                navigate(AppView.STUDY_HUB);
+                setStudyTab("sources");
+              }}
+            >
+              Sources & coverage <ExternalLink size={13} />
+            </button>
+          </footer>
+        </main>
       </div>
     </div>
   );
-};
-
-export default App;
+}
+function MoleculePreview() {
+  const [data, setData] = useState<MoleculeData | null>(null);
+  useEffect(() => {
+    let active = true;
+    normalizeMolecule(getReference("benzene")!)
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  return (
+    <div className="overview-molecule">
+      <MoleculeVisualizer data={data} loading={!data} />
+    </div>
+  );
+}

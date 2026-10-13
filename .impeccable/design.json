@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-13T22:23:06.363Z",
+  "title": "Design System: CarbonCanvas",
+  "extensions": {
+    "colorMeta": {
+      "ground": { "role": "neutral", "displayName": "Mineral Ground" },
+      "paper": { "role": "neutral", "displayName": "Paper" },
+      "raised": { "role": "neutral", "displayName": "Raised Mineral" },
+      "ink": { "role": "neutral", "displayName": "Scientific Ink" },
+      "muted": { "role": "neutral", "displayName": "Muted Ink" },
+      "line": { "role": "neutral", "displayName": "Fine Mineral Line" },
+      "petrol": { "role": "primary", "displayName": "Petrol" },
+      "accent": { "role": "secondary", "displayName": "Copper" },
+      "accent-soft": { "role": "secondary", "displayName": "Soft Copper" },
+      "selected": { "role": "neutral", "displayName": "Selected Mineral" },
+      "green": { "role": "tertiary", "displayName": "Reference Green" },
+      "white": { "role": "neutral", "displayName": "Fixed White" },
+      "drawing-ink": { "role": "neutral", "displayName": "Fixed Drawing Ink" },
+      "petrol-hover": { "role": "primary", "displayName": "Petrol Hover" },
+      "nav-text": { "role": "neutral", "displayName": "Rail Row Text" },
+      "nav-hover": { "role": "primary", "displayName": "Rail Hover" },
+      "nav-selected": { "role": "neutral", "displayName": "Rail Selection" },
+      "nav-selected-icon": { "role": "tertiary", "displayName": "Rail Selection Icon" },
+      "rail-text": { "role": "neutral", "displayName": "Rail Text" },
+      "rail-muted": { "role": "neutral", "displayName": "Rail Caption" },
+      "brand-copper": { "role": "secondary", "displayName": "Brand Copper" },
+      "preview-ground": { "role": "neutral", "displayName": "Reference Preview Ground" },
+      "preview-selected": { "role": "neutral", "displayName": "Reference Preview Tag" },
+      "preview-green": { "role": "tertiary", "displayName": "Reference Preview Green" },
+      "progress-green": { "role": "tertiary", "displayName": "Progress Green" },
+      "error-ground": { "role": "neutral", "displayName": "Error Ground" },
+      "error-ink": { "role": "neutral", "displayName": "Error Ink" },
+      "error-line": { "role": "neutral", "displayName": "Error Stroke" },
+      "night-ground": { "role": "neutral", "displayName": "Night Mineral Ground" },
+      "night-paper": { "role": "neutral", "displayName": "Night Paper" },
+      "night-raised": { "role": "neutral", "displayName": "Night Raised Mineral" },
+      "night-ink": { "role": "neutral", "displayName": "Night Scientific Ink" },
+      "night-muted": { "role": "neutral", "displayName": "Night Muted Ink" },
+      "night-line": { "role": "neutral", "displayName": "Night Mineral Line" },
+      "night-selected": { "role": "neutral", "displayName": "Night Selection" },
+      "night-accent": { "role": "secondary", "displayName": "Night Copper" },
+      "night-accent-soft": { "role": "secondary", "displayName": "Night Soft Copper" },
+      "night-green": { "role": "tertiary", "displayName": "Night Reference Green" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Page Heading", "purpose": "Responsive page titles with balanced wrapping." },
+      "headline": { "displayName": "Section Heading", "purpose": "General section hierarchy." },
+      "title": { "displayName": "Subsection Title", "purpose": "Concepts, facts, and smaller headings." },
+      "body": { "displayName": "Explanatory Body", "purpose": "Readable chemistry explanations and summaries." },
+      "label": { "displayName": "Field Label", "purpose": "Visible labels for fields and controls." },
+      "button": { "displayName": "Action Label", "purpose": "Semibold sentence-case button labels." },
+      "tag": { "displayName": "Provenance Tag", "purpose": "Compact written provenance and context labels." },
+      "fine-print": { "displayName": "Scientific Fine Print", "purpose": "Sources, limitations, and explanatory caveats." }
+    },
+    "shadows": [
+      { "name": "workspace", "value": "0 10px 28px -12px rgb(20 49 51 / 0.19)", "purpose": "Shared daylight elevation for reading and tool surfaces, quizzes, chat, and toast." },
+      { "name": "workspace-night", "value": "0 10px 28px -12px rgb(0 0 0 / 0.35)", "purpose": "Night override of the shared workspace elevation." }
+    ],
+    "motion": [
+      { "name": "control-state", "value": "0.16s", "purpose": "Button background and navigation background/text transitions." },
+      { "name": "structure-zoom", "value": "0.15s ease-out", "purpose": "Center-origin molecular SVG transform." },
+      { "name": "mobile-drawer", "value": "0.2s ease-out", "purpose": "Mobile rail transform between closed and open positions." },
+      { "name": "loading-spin", "value": "1s linear infinite", "purpose": "Pending-operation spinner rotation." },
+      { "name": "reduced-motion", "value": "0.01ms", "purpose": "Animation and transition duration under prefers-reduced-motion: reduce; scrolling becomes auto." }
+    ],
+    "breakpoints": [
+      { "name": "large-desktop-min", "value": "1400px" },
+      { "name": "compact-desktop-max", "value": "1180px" },
+      { "name": "stacked-tools-max", "value": "960px" },
+      { "name": "mobile-drawer-max", "value": "760px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Fixed petrol action with the implemented hover, focus, and disabled treatments.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\">Open study notes <svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-7-7 7 7-7 7\"/></svg></button>",
+      "css": ".ds-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:43px;padding:10px 17px;background:#173d42;color:#fff;border:1px solid transparent;border-radius:6px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:14px;font-weight:600;line-height:1.35;cursor:pointer;transition:background-color .16s}.ds-button-primary:hover:not(:disabled){background:#28545a}.ds-button-primary:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}.ds-button-primary:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Theme-aware paper action with a fine border and selected-mineral hover.",
+      "html": "<button type=\"button\" class=\"ds-button-secondary\">Return to notes</button>",
+      "css": ".ds-button-secondary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:43px;padding:10px 17px;background:var(--paper,#fff);color:var(--ink,#233738);border:1px solid var(--line,#cdd8d6);border-radius:6px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:14px;font-weight:600;line-height:1.35;cursor:pointer;transition:background-color .16s}.ds-button-secondary:hover:not(:disabled){background:var(--selected,#deebe7)}.ds-button-secondary:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}.ds-button-secondary:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Subtle Button",
+      "kind": "button",
+      "refersTo": "button-subtle",
+      "description": "Selected-mineral action used by recall controls.",
+      "html": "<button type=\"button\" class=\"ds-button-subtle\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m20 6-11 11-5-5\"/></svg>Got it</button>",
+      "css": ".ds-button-subtle{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:36px;padding:10px 17px;background:var(--selected,#deebe7);color:var(--green,#28634e);border:1px solid transparent;border-radius:6px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:14px;font-weight:600;line-height:1.35;cursor:pointer;transition:background-color .16s}.ds-button-subtle:hover{background:var(--selected,#deebe7)}.ds-button-subtle:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}.ds-button-subtle:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-subtle{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Labeled Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Paper field with a mineral stroke, copper caret, petrol focus border, and keyboard outline.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-molecule-input\">Molecule name or SMILES<input class=\"ds-field-input\" id=\"ds-molecule-input\" type=\"text\" placeholder=\"Benzene, water, or smiles:CCO\" spellcheck=\"false\"></label>",
+      "css": ".ds-field-label{display:block;color:var(--ink,#233738);font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:14px;font-weight:600}.ds-field-input{display:block;width:100%;min-width:0;margin-top:7px;padding:11px 13px;color:var(--ink,#233738);background:var(--paper,#fff);border:1px solid var(--line,#cdd8d6);border-radius:7px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:16px;font-weight:400;caret-color:var(--accent,#956144)}.ds-field-input::placeholder{color:var(--muted,#586b6c);opacity:1}.ds-field-input:focus{border-color:var(--petrol,#173d42)}.ds-field-input:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}"
+    },
+    {
+      "name": "Petrol Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Selected and default rows from the persistent rail; active state also uses aria-current.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main navigation\"><button type=\"button\" class=\"ds-nav-item ds-nav-active\" aria-current=\"page\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 3 10 6-10 6L2 9l10-6zm-10 9 10 6 10-6M2 15l10 6 10-6\"/></svg>Workspace</button><button type=\"button\" class=\"ds-nav-item\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 7v14m0-14C9 4 5 4 2 4v16c4 0 7 0 10 1m0-14c3-3 7-3 10-3v16c-4 0-7 0-10 1\"/></svg>Study hub</button></nav>",
+      "css": ".ds-nav{display:grid;gap:4px;background:var(--petrol,#173d42);padding:28px 16px 20px;font-family:'Source Sans 3','Segoe UI',sans-serif}.ds-nav-item{display:flex;align-items:center;gap:12px;min-height:43px;padding:10px 12px;width:100%;text-align:left;border:0;border-radius:6px;color:#bed2cc;background:none;font-family:inherit;font-size:15px;cursor:pointer;transition:background-color .16s,color .16s}.ds-nav-item svg{flex-shrink:0}.ds-nav-item:hover{background:#244c50;color:#fff}.ds-nav-item.ds-nav-active{background:#d9e8e1;color:#173d42;font-weight:600}.ds-nav-active svg{color:#43664f}.ds-nav-item:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}@media(max-width:1180px){.ds-nav{padding-left:12px;padding-right:12px}.ds-nav-item{font-size:14px;gap:10px}}@media(prefers-reduced-motion:reduce){.ds-nav-item{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Reference Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Static written provenance label; its green color does not assert verification.",
+      "html": "<span class=\"ds-tag\">Reference example</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;background:var(--selected,#deebe7);color:var(--green,#28634e);border-radius:4px;padding:4px 8px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:12px;font-weight:600;white-space:nowrap}"
+    },
+    {
+      "name": "Copper Tag",
+      "kind": "chip",
+      "refersTo": "tag-copper",
+      "description": "Static explanatory label using the theme-aware copper pair.",
+      "html": "<span class=\"ds-tag-copper\">AI explanation</span>",
+      "css": ".ds-tag-copper{display:inline-flex;align-items:center;background:var(--accent-soft,#eee2d7);color:var(--accent,#956144);border-radius:4px;padding:4px 8px;font-family:'Source Sans 3','Segoe UI',sans-serif;font-size:12px;font-weight:600;white-space:nowrap}"
+    },
+    {
+      "name": "Reading Panel",
+      "kind": "card",
+      "refersTo": "reading-panel",
+      "description": "Article surface with the implemented shadow, larger heading, readable summary, and responsive inset.",
+      "html": "<article class=\"ds-reading-panel\"><h2>Molecular geometry</h2><p class=\"ds-reading-summary\">Read bond orders, preserve formal charges, and separate structure from geometry.</p></article>",
+      "css": ".ds-reading-panel{background:var(--paper,#fff);color:var(--ink,#233738);padding:30px 34px;border-radius:12px;box-shadow:var(--shadow,0 10px 28px -12px rgb(20 49 51 / .19));min-width:0;font-family:'Source Sans 3','Segoe UI',sans-serif}.ds-reading-panel>h2{margin:0 0 13px;font-size:31px;font-weight:600;line-height:1.25;letter-spacing:-.018em;text-wrap:balance}.ds-reading-summary{margin:0;color:var(--muted,#586b6c);max-width:68ch;font-size:16px;line-height:1.6}@media(max-width:1180px){.ds-reading-panel{padding:24px}}@media(max-width:760px){.ds-reading-panel{padding:24px 22px}.ds-reading-panel>h2{font-size:27px}}"
+    },
+    {
+      "name": "Molecular Structure Viewer",
+      "kind": "custom",
+      "refersTo": "structure-viewer",
+      "description": "Implemented empty-state specimen with toolbar, fixed white stage, and scientific footer. RDKit supplies the molecule SVG at runtime; this snippet adds no generated depiction or measured geometry claim.",
+      "html": "<section class=\"ds-workbench\" aria-label=\"Molecular structure viewer\"><div class=\"ds-bench-toolbar\"><span class=\"ds-bench-kind\">2D structure</span><div class=\"ds-toolbar-actions\"><label class=\"ds-toggle-label\"><input type=\"checkbox\"> Show hydrogens</label><button type=\"button\" class=\"ds-icon-button\" aria-label=\"Zoom out\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></button><button type=\"button\" class=\"ds-icon-button\" aria-label=\"Zoom in\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M12 5v14\"/></svg></button><button type=\"button\" class=\"ds-icon-button\" aria-label=\"Reset view\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 11a9 9 0 1 1 2.5 6M3 4v7h7\"/></svg></button><button type=\"button\" class=\"ds-icon-button\" aria-label=\"Export molecule SVG\" disabled><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3\"/></svg></button></div></div><div class=\"ds-structure-stage\"><div class=\"ds-empty-state\"><h3>Inspect a molecule</h3><p>Choose a reference example or enter a name or SMILES above.</p></div></div><div class=\"ds-bench-foot\"><span>Carbon at line ends and vertices; hydrogens implied.</span><span>2D projection, not measured geometry</span></div></section>",
+      "css": ".ds-workbench{background:var(--paper,#fff);color:var(--ink,#233738);border-radius:12px;box-shadow:var(--shadow,0 10px 28px -12px rgb(20 49 51 / .19));overflow:hidden;font-family:'Source Sans 3','Segoe UI',sans-serif}.ds-bench-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line,#cdd8d6);flex-wrap:wrap}.ds-bench-kind{font-size:13px;font-weight:600;color:var(--muted,#586b6c)}.ds-toolbar-actions{display:flex;align-items:center;gap:1px;flex-wrap:wrap}.ds-toggle-label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;margin-right:12px;color:var(--muted,#586b6c)}.ds-toggle-label input{width:15px;height:15px;accent-color:#28634e;margin:0}.ds-icon-button{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;background:transparent;color:inherit;border:0;border-radius:5px;padding:8px;cursor:pointer}.ds-icon-button:hover:not(:disabled){background:var(--selected,#deebe7)}.ds-icon-button:focus-visible,.ds-toggle-label input:focus-visible{outline:2px solid var(--accent,#956144);outline-offset:4px}.ds-icon-button:disabled{opacity:.5;cursor:not-allowed}.ds-structure-stage{height:385px;min-height:250px;background:#fff;color:#233738;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}.ds-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;text-align:center;padding:45px 25px;min-height:230px}.ds-empty-state h3{margin:0;font-size:18px;font-weight:600;line-height:1.35}.ds-empty-state p{margin:0;max-width:50ch;font-size:15px;line-height:1.6;color:var(--muted,#586b6c)}.ds-bench-foot{font-size:11px;color:var(--muted,#586b6c);padding:12px 16px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;border-top:1px solid var(--line,#cdd8d6)}@media(max-width:1180px){.ds-toggle-label{margin-right:3px}}@media(max-width:760px){.ds-structure-stage{height:330px}.ds-bench-toolbar{padding:12px}.ds-bench-kind{font-size:12px}.ds-toolbar-actions .ds-icon-button{min-width:33px;padding:7px}.ds-toggle-label{font-size:11px}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Scientific Workspace",
+    "overview": "CarbonCanvas uses the user's selected scientific workspace: mineral grey ground, paper reading surfaces, a petrol navigation rail, and copper details. The atmosphere is calm and precise. A single humanist sans serif carries headings, explanatory text, and compact controls, while molecular figures provide the visual subject.\n\nThe implementation balances generous panel padding with compact reference rows. Soft downward shadows distinguish the active reading and molecular work areas; fine borders organize modules, sources, and facts. The same material relationships continue in night mode, with a deliberately light molecular drawing canvas.",
+    "keyCharacteristics": [
+      "Mineral ground, paper surfaces, petrol anchors, and copper details.",
+      "Source Sans 3 throughout the interface.",
+      "Soft elevation for work areas and fine borders for reference rows.",
+      "Compact controls with gently curved corners.",
+      "Molecular figures accompanied by provenance, graph checks, and separate geometry facts."
+    ],
+    "rules": [
+      { "name": "The Evidence Label Rule", "body": "Preserve the written provenance and assessment labels alongside their color treatment. Green appears on several kinds of content and does not by itself signify factual verification.", "section": "colors" },
+      { "name": "The Work Area Rule", "body": "Use the shared shadow for the reading or tool surface that holds the task; use tonal surfaces and separators for its reference rows and supporting information.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the implemented mineral, paper, petrol, and copper roles consistently.",
+      "Do preserve Source Sans 3 and the existing semibold heading and control hierarchy.",
+      "Do keep written provenance, assessment, and source labels adjacent to scientific content.",
+      "Do preserve the fixed light structure canvas when the surrounding workspace uses night mode.",
+      "Do carry the copper keyboard-focus outline and visible loading, error, and disabled states into related controls.",
+      "Do use the existing responsive stacking and wrapping behavior to keep scientific text and fields readable."
+    ],
+    "donts": [
+      "Don't replace reference rows with individually elevated cards.",
+      "Don't treat a green tag or a successful graph check as evidence that AI output is verified.",
+      "Don't label the 2D molecular drawing as measured 3D geometry.",
+      "Don't change the fixed drawing, rail, primary-action, preview, or error colors by treating every color as a theme override.",
+      "Don't add full-pill corners, display typefaces, or decorative visual effects to the approved scientific workspace."
+    ]
+  }
+}

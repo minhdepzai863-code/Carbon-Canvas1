@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 *.tsbuildinfo
+.checks/
+.impeccable/review/
+.impeccable/questions/
+.licenses/

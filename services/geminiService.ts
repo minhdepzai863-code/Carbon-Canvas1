@@ -1,179 +1,208 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI } from "@google/genai";
 import type {
   MoleculeData,
   QuizData,
   ReactionData,
   ReactionSimulation,
   StudyGuide,
-} from '../types';
+} from "../types";
+import {
+  normalizeMolecule,
+  checkEquation,
+  productMatchesEquation,
+} from "./chemistry";
+import { getReference } from "../content/molecules";
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
-const model = import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
-const capacityFallbackModel = 'gemini-3.5-flash-lite';
+const model = import.meta.env.VITE_GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+const capacityFallbackModel = "gemini-3.5-flash-lite";
 
 const client = () => {
   if (!apiKey) {
-    throw new Error('Missing VITE_GEMINI_API_KEY. Add it to .env.local and restart the app.');
+    throw new Error(
+      "Missing VITE_GEMINI_API_KEY. Add it to .env.local and restart the app.",
+    );
   }
   return new GoogleGenAI({ apiKey });
 };
 
 const bondSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    source: { type: 'string' },
-    target: { type: 'string' },
-    order: { type: 'integer', minimum: 1, maximum: 3 },
-    stereo: { type: 'string', enum: ['none', 'wedge', 'dash'] },
+    source: { type: "string" },
+    target: { type: "string" },
+    order: { type: "integer", minimum: 1, maximum: 3 },
+    stereo: { type: "string", enum: ["none", "wedge", "dash"] },
   },
-  required: ['source', 'target', 'order'],
+  required: ["source", "target", "order"],
 };
 
 const moleculeSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    name: { type: 'string' },
-    description: { type: 'string' },
+    name: { type: "string" },
+    description: { type: "string" },
+    smiles: { type: "string" },
     atoms: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
-        properties: { id: { type: 'string' }, element: { type: 'string' } },
-        required: ['id', 'element'],
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          element: { type: "string" },
+          formalCharge: { type: "integer" },
+        },
+        required: ["id", "element"],
       },
     },
-    bonds: { type: 'array', items: bondSchema },
+    bonds: { type: "array", items: bondSchema },
     resonanceStructures: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          description: { type: 'string' },
-          bonds: { type: 'array', items: bondSchema },
+          description: { type: "string" },
+          bonds: { type: "array", items: bondSchema },
         },
-        required: ['description', 'bonds'],
+        required: ["description", "bonds"],
       },
     },
     symmetry: {
-      type: 'object',
+      type: "object",
       properties: {
-        pointGroup: { type: 'string' },
-        elements: { type: 'array', items: { type: 'string' } },
+        pointGroup: { type: "string" },
+        elements: { type: "array", items: { type: "string" } },
       },
-      required: ['pointGroup', 'elements'],
+      required: ["pointGroup", "elements"],
     },
   },
-  required: ['name', 'description', 'atoms', 'bonds'],
+  required: ["name", "description", "smiles", "atoms", "bonds"],
 };
 
 const quizSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    topic: { type: 'string' },
+    topic: { type: "string" },
     questions: {
-      type: 'array',
+      type: "array",
       minItems: 5,
       maxItems: 5,
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          id: { type: 'integer' },
-          type: { type: 'string', enum: ['mcq', 'fitb', 'short_answer'] },
-          question: { type: 'string' },
-          options: { type: 'array', items: { type: 'string' } },
-          correctAnswer: { type: 'string' },
-          explanation: { type: 'string' },
+          id: { type: "integer" },
+          type: { type: "string", enum: ["mcq", "fitb", "short_answer"] },
+          question: { type: "string" },
+          options: { type: "array", items: { type: "string" } },
+          correctAnswer: { type: "string" },
+          explanation: { type: "string" },
         },
-        required: ['id', 'type', 'question', 'correctAnswer', 'explanation'],
+        required: ["id", "type", "question", "correctAnswer", "explanation"],
       },
     },
   },
-  required: ['topic', 'questions'],
+  required: ["topic", "questions"],
 };
 
 const reactionSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    name: { type: 'string' },
+    name: { type: "string" },
     steps: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          step: { type: 'integer' },
-          description: { type: 'string' },
-          keyConcept: { type: 'string' },
+          step: { type: "integer" },
+          description: { type: "string" },
+          keyConcept: { type: "string" },
         },
-        required: ['step', 'description', 'keyConcept'],
+        required: ["step", "description", "keyConcept"],
       },
     },
-    references: { type: 'array', items: { type: 'string' } },
+    references: { type: "array", items: { type: "string" } },
   },
-  required: ['name', 'steps', 'references'],
+  required: ["name", "steps", "references"],
 };
 
 const studyGuideSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    topic: { type: 'string' },
-    summary: { type: 'string' },
-    keyPoints: { type: 'array', items: { type: 'string' } },
-    commonMistakes: { type: 'array', items: { type: 'string' } },
+    topic: { type: "string" },
+    summary: { type: "string" },
+    keyPoints: { type: "array", items: { type: "string" } },
+    commonMistakes: { type: "array", items: { type: "string" } },
     resources: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          title: { type: 'string' },
-          url: { type: 'string' },
-          source: { type: 'string' },
+          title: { type: "string" },
+          url: { type: "string" },
+          source: { type: "string" },
         },
-        required: ['title', 'url', 'source'],
+        required: ["title", "url", "source"],
       },
     },
     flashcards: {
-      type: 'array',
+      type: "array",
       minItems: 6,
       maxItems: 10,
       items: {
-        type: 'object',
+        type: "object",
         properties: {
-          term: { type: 'string' },
-          definition: { type: 'string' },
-          hint: { type: 'string' },
+          term: { type: "string" },
+          definition: { type: "string" },
+          hint: { type: "string" },
         },
-        required: ['term', 'definition', 'hint'],
+        required: ["term", "definition", "hint"],
       },
     },
   },
-  required: ['topic', 'summary', 'keyPoints', 'commonMistakes', 'resources', 'flashcards'],
+  required: [
+    "topic",
+    "summary",
+    "keyPoints",
+    "commonMistakes",
+    "resources",
+    "flashcards",
+  ],
 };
 
 const simulationSchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    equation: { type: 'string' },
-    reactionType: { type: 'string' },
-    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-    explanation: { type: 'string' },
-    safetyNote: { type: 'string' },
+    equation: { type: "string" },
+    reactionType: { type: "string" },
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+    explanation: { type: "string" },
+    safetyNote: { type: "string" },
     product: moleculeSchema,
   },
-  required: ['equation', 'reactionType', 'confidence', 'explanation', 'safetyNote', 'product'],
+  required: [
+    "equation",
+    "reactionType",
+    "confidence",
+    "explanation",
+    "safetyNote",
+    "product",
+  ],
 };
 
 const parseJson = <T>(text: string | undefined): T => {
-  if (!text?.trim()) throw new Error('Gemini returned an empty response.');
+  if (!text?.trim()) throw new Error("Gemini returned an empty response.");
   return JSON.parse(text) as T;
 };
 
 const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
-  const request = (modelName: string) => client().models.generateContent({
+  const request = (modelName: string) =>
+    client().models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
-        systemInstruction: 'You are a careful chemistry educator. Distinguish predictions from verified facts, obey valence rules, and never invent citations.',
-        responseMimeType: 'application/json',
+        systemInstruction:
+          "You are a careful chemistry educator. Distinguish predictions from verified facts. All structures must include isomeric SMILES with explicit formal charges and specified stereochemistry only when known. SMILES is the authoritative graph. Do not invent a unique isomer from an ambiguous molecular formula. Do not infer experimental angles or point groups from a 2D drawing. Never invent citations. Reaction feasibility depends on substrate, solvent, catalyst, temperature and time; catalysts do not shift equilibrium. State omitted assumptions.",
+        responseMimeType: "application/json",
         responseJsonSchema: schema,
       },
     });
@@ -182,33 +211,77 @@ const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
     return parseJson<T>((await request(model)).text);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const capacityError = message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE');
+    const capacityError =
+      message.includes("503") ||
+      message.includes("high demand") ||
+      message.includes("UNAVAILABLE");
     if (!capacityError || model === capacityFallbackModel) throw error;
     return parseJson<T>((await request(capacityFallbackModel)).text);
   }
 };
 
 const cleanMolecule = (data: MoleculeData) => ({
-  atoms: data.atoms.map(({ id, element }) => ({ id, element })),
+  smiles: data.smiles,
+  atoms: data.atoms.map(({ id, element, formalCharge }) => ({
+    id,
+    element,
+    formalCharge,
+  })),
   bonds: data.bonds.map((bond) => ({
-    source: typeof bond.source === 'object' ? (bond.source as { id: string }).id : bond.source,
-    target: typeof bond.target === 'object' ? (bond.target as { id: string }).id : bond.target,
+    source:
+      typeof bond.source === "object"
+        ? (bond.source as { id: string }).id
+        : bond.source,
+    target:
+      typeof bond.target === "object"
+        ? (bond.target as { id: string }).id
+        : bond.target,
     order: bond.order,
-    stereo: bond.stereo ?? 'none',
+    stereo: bond.stereo ?? "none",
   })),
 });
 
-export const generateMoleculeData = (moleculeName: string) =>
-  generateJson<MoleculeData>(
+export const generateMoleculeData = async (moleculeName: string) => {
+  const reference = getReference(moleculeName);
+  if (reference) return normalizeMolecule(reference);
+  if (/^smiles:/i.test(moleculeName))
+    return normalizeMolecule({
+      name: "Custom structure",
+      description:
+        "Structure supplied as SMILES. Identity has not been checked against a reference database.",
+      smiles: moleculeName.replace(/^smiles:/i, "").trim(),
+      atoms: [],
+      bonds: [],
+      provenance: "user",
+    });
+  const result = await generateJson<MoleculeData>(
     `Generate a chemically plausible 2D graph for ${JSON.stringify(moleculeName)}. Include explicit heavy atoms, bonds, a concise description, resonance contributors when relevant, and symmetry information.`,
     moleculeSchema,
   );
+  return normalizeMolecule({
+    ...result,
+    provenance: "ai",
+    sourceUrl: undefined,
+    geometry: undefined,
+    symmetry: undefined,
+  });
+};
 
-export const analyzeMolecule = (data: MoleculeData) =>
-  generateJson<MoleculeData>(
+export const analyzeMolecule = async (data: MoleculeData) => {
+  const checked = await normalizeMolecule(data);
+  const result = await generateJson<MoleculeData>(
     `Analyze this user-edited structure: ${JSON.stringify(cleanMolecule(data))}. Check valence, charge plausibility, stability, and whether the species is known. If impossible, set the name to "Impossible structure" and explain exactly why.`,
     moleculeSchema,
   );
+  return {
+    ...checked,
+    description: result.description,
+    provenance: "user" as const,
+    sourceUrl: undefined,
+    geometry: undefined,
+    symmetry: undefined,
+  };
+};
 
 export interface ReactionConditions {
   temp: number;
@@ -217,24 +290,69 @@ export interface ReactionConditions {
   solvent: string;
 }
 
-export const applyReaction = (data: MoleculeData, reagent: string, conditions: ReactionConditions) =>
-  generateJson<MoleculeData>(
+export const applyReaction = async (
+  data: MoleculeData,
+  reagent: string,
+  conditions: ReactionConditions,
+) => {
+  const result = await generateJson<MoleculeData>(
     `Predict the major product for reactant ${JSON.stringify(cleanMolecule(data))}, reagent ${JSON.stringify(reagent)}, and conditions ${JSON.stringify(conditions)}. Account for kinetics, thermodynamics, solvent, catalyst, and selectivity. If no reaction is expected, preserve the reactant graph and name it "No reaction".`,
     moleculeSchema,
   );
+  return normalizeMolecule({
+    ...result,
+    provenance: "ai",
+    sourceUrl: undefined,
+    geometry: undefined,
+    symmetry: undefined,
+  });
+};
 
 export const predictReaction = (
   reactantA: string,
   reactantB: string,
   conditions: ReactionConditions,
-) => generateJson<ReactionSimulation>(
-  `Predict the major product when reactant A ${JSON.stringify(reactantA)} is combined with reactant B ${JSON.stringify(reactantB)} under ${JSON.stringify(conditions)}. Inputs may be names, formulas, or SMILES. Return one major product graph, a balanced or clearly qualitative equation, the reaction class, confidence, a concise mechanistic rationale, and a practical safety note. If the inputs do not plausibly react, return "No reaction" as the product name and explain why. This is an educational prediction, not laboratory authorization.`,
-  simulationSchema,
-);
+) => {
+  return generateJson<ReactionSimulation>(
+    `Predict the major product when reactant A ${JSON.stringify(reactantA)} is combined with reactant B ${JSON.stringify(reactantB)} under ${JSON.stringify(conditions)}. Inputs may be names or SMILES; formulas that cannot identify an isomer need clarification. Return one major product graph, an equation using explicit molecular formulas with integer coefficients, spaces around plus signs, and -> or ⇌. Include all coproducts needed to balance. Write charges as ^2- or ^+; do not place conditions in the equation. Also give the reaction class, model-assessed confidence, assumptions, mechanistic rationale, and a practical safety note. Do not infer catalyst or heating not supplied. If the inputs do not plausibly react on a meaningful timescale, return "No reaction" as the product name and explain why. This is an educational prediction.`,
+    simulationSchema,
+  ).then(async (result) => {
+    if (result.product.name.toLowerCase().includes("no reaction"))
+      return {
+        ...result,
+        assessment: "no-reaction" as const,
+        balanceNote: "No product is claimed under these conditions.",
+      };
+    const balance = checkEquation(result.equation);
+    if (balance.balanced === false)
+      throw new Error(balance.note + " Refine the inputs and try again.");
+    const product = await normalizeMolecule({
+      ...result.product,
+      provenance: "ai",
+      sourceUrl: undefined,
+      geometry: undefined,
+      symmetry: undefined,
+    });
+    if (
+      productMatchesEquation(result.equation, product.formula || "") === false
+    )
+      throw new Error(
+        "The proposed structure does not match a product formula in the equation. Refine the inputs and try again.",
+      );
+    return {
+      ...result,
+      product,
+      assessment: balance.balanced
+        ? ("balanced" as const)
+        : ("qualitative" as const),
+      balanceNote: balance.note,
+    };
+  });
+};
 
-export const generateQuiz = (topic: string) =>
+export const generateQuiz = (topic: string, context = "") =>
   generateJson<QuizData>(
-    `Create exactly five questions about ${JSON.stringify(topic)}: two multiple choice questions with four options, two fill-in-the-blank questions, and one short-answer question. Make correctAnswer exact and explanations instructional.`,
+    `Create exactly five questions about ${JSON.stringify(topic)}, aligned to this course context: ${context}. Use five multiple-choice questions with exactly four distinct options each, correctAnswer identical to one option, and explanations instructional. Avoid short answers graded by brittle string matching. Base facts on the supplied notes when present; do not imply official exam-board authorship.`,
     quizSchema,
   );
 
@@ -251,14 +369,15 @@ export const generateStudyGuide = (topic: string) =>
   );
 
 export const chatWithTutor = async (
-  history: { role: 'user' | 'model'; parts: { text: string }[] }[],
+  history: { role: "user" | "model"; parts: { text: string }[] }[],
   message: string,
 ) => {
   const chat = client().chats.create({
     model,
     history,
     config: {
-      systemInstruction: 'You are a concise, encouraging organic chemistry tutor. Use correct nomenclature, label uncertainty, and remind users that reaction predictions require experimental verification.',
+      systemInstruction:
+        "You are a concise, encouraging organic chemistry tutor. Use correct nomenclature, label uncertainty, and remind users that reaction predictions require experimental verification.",
     },
   });
   const result = await chat.sendMessage({ message });
