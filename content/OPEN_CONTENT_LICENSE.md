@@ -1,4 +1,6 @@
-# MIT examination adaptations
+# Historical MIT examination adaptations
+
+The MIT adaptations below were retired with Undergraduate on 14 October 2026. They are absent from the active question bank. This notice preserves attribution for earlier Git revisions; the current Cambridge/IB bank does not include these MIT questions.
 
 The `OPEN_PAPER_QUESTIONS` items in questionBank.ts are adapted from selected questions in **5.111 Principles of Chemical Science, Fall 2014**, Catherine Drennan / Massachusetts Institute of Technology, published by MIT OpenCourseWare.
 

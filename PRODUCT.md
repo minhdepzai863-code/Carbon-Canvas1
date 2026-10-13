@@ -6,7 +6,7 @@
 web
 
 ## Users
-Chemistry students studying Cambridge 9701 (2025–2027), current IB Diploma chemistry, and introductory undergraduate chemistry. These course choices are confirmed by the user's request and their Cambridge preference.
+Chemistry students studying Cambridge 9701 (2025–2027), current IB Diploma chemistry. Undergraduate was removed at the user's request on 14 October 2026.
 
 ## Product Purpose
 Connect syllabus study, active recall, molecular structures, and reaction reasoning in one workspace. Readers must be able to distinguish cited educational content from AI predictions.

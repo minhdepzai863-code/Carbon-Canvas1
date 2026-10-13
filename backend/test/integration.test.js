@@ -15,10 +15,8 @@ import { createLimiter } from "../src/rate-limit.js";
 import { decryptMessage, deliverOne } from "../src/mail.js";
 import { migrate } from "../scripts/migrate.js";
 import { COURSES, getStudyGuide } from "../../content/curriculum.ts";
-import {
-  getQuestionBank,
-  OPEN_PAPER_QUESTIONS,
-} from "../../content/questionBank.ts";
+import { getQuestionBank } from "../../content/questionBank.ts";
+import { PAST_PAPERS, gradeMcqPaper } from "../../content/pastPapers.ts";
 
 let cluster, admin, pool, server, config, base, auth;
 let cookie, userId;
@@ -446,6 +444,96 @@ test("question API withholds answers and server grades immutable practice snapsh
   assert.deepEqual(replay.data, result.data);
   assert.equal((await request("/api/practice/history")).data.length, 1);
 });
+test("retired curriculum is absent and rejects new study requests", async () => {
+  assert.deepEqual(Object.keys((await request("/api/curricula")).data), [
+    "ALEVEL",
+    "IB",
+  ]);
+  assert.equal(
+    (await request("/api/study/UNDERGRAD/UNDERGRAD-F1")).status,
+    400,
+  );
+  assert.equal(
+    (await request("/api/questions?course=UNDERGRAD&moduleId=UNDERGRAD-F1"))
+      .status,
+    400,
+  );
+});
+test("past-paper catalogue separates formats and keys are not public API metadata", async () => {
+  assert.equal(PAST_PAPERS.length, 352);
+  assert.equal(PAST_PAPERS.filter((p) => p.format === "mcq").length, 63);
+  assert.equal(PAST_PAPERS.filter((p) => p.format === "frq").length, 289);
+  assert.equal(new Set(PAST_PAPERS.map((p) => p.id)).size, 352);
+  for (const p of PAST_PAPERS.filter((p) => p.format === "mcq")) {
+    assert.match(p.answerKey, /^[ABCD]{40}$/);
+    const answers = Object.fromEntries(
+      [...p.answerKey].map((letter, i) => [String(i + 1), letter]),
+    );
+    assert.equal(gradeMcqPaper(p, answers).score, 40);
+    assert.equal(gradeMcqPaper(p, {}).score, 0);
+  }
+  const catalogue = await request("/api/papers?format=mcq&year=2026");
+  assert.equal(catalogue.status, 200);
+  assert.equal(catalogue.data.papers.length, 5);
+  assert.ok(
+    catalogue.data.papers.every(
+      (p) => p.format === "mcq" && p.year === 2026 && !("answerKey" in p),
+    ),
+  );
+  assert.equal((await request("/api/papers?year=2027")).status, 400);
+});
+test("past-paper grading requires auth, rejects forged grades and saves owned server results", async () => {
+  const paper = PAST_PAPERS.find((p) => p.id === "9701_s26_qp_11");
+  const path = "/api/papers/" + paper.id + "/grade";
+  assert.equal(
+    (
+      await request(path, {
+        method: "POST",
+        body: { answers: { 1: "A" } },
+        cookie: null,
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await request(path, {
+        method: "POST",
+        body: { answers: { 1: "A" }, score: 40 },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await request(path, { method: "POST", body: { answers: { 41: "A" } } }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await request(path, { method: "POST", body: { answers: { 1: "E" } } }))
+      .status,
+    400,
+  );
+  const result = await request(path, {
+    method: "POST",
+    body: { answers: { 1: "A", 2: "A" } },
+  });
+  assert.equal(result.status, 201);
+  assert.equal(result.data.score, 1);
+  assert.equal(result.data.maximum, 40);
+  const history = (await request("/api/paper-attempts")).data;
+  const row = history.find((r) => r.id === result.data.attemptId);
+  assert.equal(row.grading_method, "markscheme-answer-key");
+  assert.equal(Number(row.marks), 1);
+  assert.equal(
+    (
+      await withUser(pool, "other-user", (db) =>
+        db.query("SELECT * FROM cc_app.paper_attempts"),
+      )
+    ).rowCount,
+    0,
+  );
+});
 test("CORS/CSRF, unsafe redirects, malformed JSON and forged proxy header protections", async () => {
   assert.equal(
     (
@@ -611,11 +699,7 @@ test("content and source provenance stays explicit through 2026", () => {
         ),
       );
     }
-  assert.ok(
-    OPEN_PAPER_QUESTIONS.every(
-      (q) => q.source.reference && q.source.license === "CC BY-NC-SA 4.0",
-    ),
-  );
+  assert.deepEqual(Object.keys(COURSES), ["ALEVEL", "IB"]);
 });
 test("frontend CSS and layout are not required for backend execution", async () => {
   const source = await readFile(

@@ -68,8 +68,10 @@ All POST/PUT/DELETE requests use JSON and an allowed Origin. Private endpoints u
 | POST `/api/practice/sessions/:id/submit`               | Private              | `{answers:[{questionId,answer}]}`; server score/feedback, idempotent completion                   |
 | GET `/api/practice/history`                            | Private              | Own last 100 sessions/results                                                                     |
 | GET/POST `/api/paper-attempts`                         | Private              | `{paperId,marks,maximum,feedback?}`; explicitly self-reported marks                               |
+| GET `/api/papers?format=mcq&year=2026`                 | Public               | Checked paper metadata without answer keys                                                        |
+| POST `/api/papers/:id/grade`                           | Private              | `{answers:{"1":"A"}}`; server-computed MCQ score, feedback and stored attempt                     |
 
-Courses are `ALEVEL`, `IB`, `UNDERGRAD`. Use module IDs from the catalogue, e.g. `ALEVEL-1` or `UNDERGRAD-F1`. Custom/reviewed cards and paper attempts cannot claim authoritative examination grades. The simple review schedule is not a calibrated spaced-repetition model.
+Courses are `ALEVEL` and `IB`. Use module IDs from the catalogue, e.g. `ALEVEL-1` or `IB-S1.1`. Undergraduate is retired and new API requests for it return 400. Existing records are retained; migration 001 is not rewritten. The simple review schedule is not a calibrated spaced-repetition model.
 
 ## Frontend integration without an auth UI redesign
 
@@ -127,13 +129,17 @@ Browsers supply Origin automatically. CLI clients must send the configured Origi
 
 ## Paper/content rights and grading
 
-The bank differentiates original recall items from seven MCQ adaptations of selected MIT 5.111 Fall 2014 items, with precise paper references and attribution. Adaptations are CC BY-NC-SA 4.0; set `NONCOMMERCIAL_OCW=true` on the API only for compatible use. The frontend offers an explicit noncommercial-study checkbox. This is a small verified subset, not all MIT papers or a complete university curriculum. MIT 5.12 provides linked organic exams/solutions; it does not cover every advanced/inorganic module in the existing broader pathway.
+Original module recall remains separate from the checked CIE 9701 paper catalogue: 352 question papers, 2018–2026, with 63 complete 40-answer MCQ keys and 289 free-response/practical papers. Undergraduate and its MIT adaptations are no longer active. Paper PDFs remain source-hosted; no copyrighted document binaries or full question text are committed.
 
-Cambridge and IB past papers remain external references pending reproduction permission. PapaCambridge, IB Docs and Revision Village links are catalogued separately from licensed bank content; accessibility is not proof of redistribution rights. Sources were checked through 14 October 2026, not claimed complete through every 2026 session. Old IB exams must be mapped carefully to the first-assessment-2025 framework.
+Cambridge papers appear as original PDF references in the website's Practice questions section, with separate MCQ/free-response format choices. A local-only PDF.js reader supports downloaded copies where native embedding fails; selected documents are not uploaded. IB remains external references. PapaCambridge's PDFs prohibit re-hosting. Sources were checked on 14 October 2026; no October/November 2026 folder was listed. Old papers may assess retired outcomes.
 
-MCQs use deterministic answer-key grading. Paper PDFs are marked using their external markschemes and can store explicitly self-reported attempts via the API. No AI examiner is claimed and no token-bearing AI call is used for scoring. Structural/data coverage tests are not pedagogical validation of every question or a substitute for an educator review.
+GET `/api/papers?format=mcq&year=2026&session=may-june` returns public metadata without answer keys. POST `/api/papers/:id/grade` requires a verified session and a body such as `{answers:{"1":"A","2":"C"}}`. Only question numbers 1–40 and A–D are accepted; no client user ID, score or grading method is accepted. Unanswered items score zero. The server computes feedback and stores a user-owned attempt. Run the additive, CLI-named `20261013232640_paper_grading_provenance.sql` through the existing backend migration runner before upgrading the API.
 
-Credits: [MIT OCW license](https://ocw.mit.edu/pages/privacy-and-terms-of-use/), [IB licensing](https://ibo.org/become-an-ib-school/ib-publishing/licensing/), [Cambridge permissions](https://www.cambridgeinternational.org/support-and-training-for-schools/endorsed-resources/), OpenStax references attached to each module. Evidence/claim separation used the installed scientific-critical-thinking skill; Scientific Agent Skills citation remains in the root README.
+GET `/api/paper-attempts` includes the database `grading_method`: `markscheme-answer-key` for server grading, `self-reported` for the existing manual attempt endpoint. Do not infer provenance from arbitrary feedback text supplied by a client. The new column inherits the existing private schema, FORCE RLS, owner policy and index. No Supabase Data API roles are granted access.
+
+The current frontend computes guest MCQ grades locally and saves answers/latest assessments per paper in localStorage; it is not yet connected to authenticated cloud APIs. Local scores can be edited and must not be treated as authoritative grades. FRQ grading is markscheme-guided self-assessment, not AI marking. No AI examiner or token-bearing scoring call is claimed. Structural checks do not replace educator review.
+
+Credits: [PapaCambridge source catalogue](https://pastpapers.papacambridge.com/papers/caie/as-and-a-level-chemistry-9701), [IB licensing](https://ibo.org/become-an-ib-school/ib-publishing/licensing/), [PDF.js](https://mozilla.github.io/pdf.js/), OpenStax references attached to each module. Scientific Agent Skills citation remains in the root README.
 
 ## Tests and operations
 

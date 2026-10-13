@@ -1,7 +1,7 @@
 import type { Flashcard, Module, StudyGuide, VideoResource } from "../types";
 import { extraCards } from "./studyDetails.ts";
 
-export type CourseId = "ALEVEL" | "IB" | "UNDERGRAD";
+export type CourseId = "ALEVEL" | "IB";
 export const REVIEW_DATE = "14 October 2026";
 export const SOURCES = {
   cambridge: {
@@ -800,7 +800,7 @@ export const LESSONS: Record<string, Lesson> = {
   ),
 };
 
-// Scope-specific notes keep AS-only analysis and nitriles separate from A2/undergraduate material.
+// Scope-specific notes keep AS-only analysis and nitriles separate from A2 material.
 const SCOPED: Record<string, Lesson> = {
   "ALEVEL-19": lesson(
     "Study the nitrile functional group, carbon-chain extension, and conversion into acids and amines.",
@@ -1020,24 +1020,6 @@ const SCOPED: Record<string, Lesson> = {
     ],
     chapter("5-3-enthalpy"),
   ),
-  "UNDERGRAD-O7": lesson(
-    "Compare alcohol and ether structure, synthesis, and reactivity.",
-    [
-      ...LESSONS.alcohols.cards,
-      f(
-        "What is the Williamson ether synthesis?",
-        "An alkoxide reacts with a suitable alkyl halide by SN2 to form an ether.",
-      ),
-      f(
-        "Why are tertiary halides poor Williamson substrates?",
-        "Steric hindrance suppresses SN2 and elimination often competes.",
-      ),
-    ],
-    [
-      "Consider substitution versus elimination before selecting an ether synthesis.",
-    ],
-    organic("18-2-preparing-ethers"),
-  ),
 };
 type Entry = [
   code: string,
@@ -1215,159 +1197,6 @@ const ib: Entry[] = [
     "SL + HL",
   ],
 ];
-const ug: Entry[] = [
-  [
-    "F1",
-    "Structure, bonding and molecular geometry",
-    "bonding",
-    "Foundations",
-    "Introductory",
-  ],
-  [
-    "F2",
-    "Lewis structures, charge and resonance",
-    "lewis",
-    "Foundations",
-    "Introductory",
-  ],
-  ["F3", "Quantitative chemistry", "mole", "Foundations", "Introductory"],
-  ["F4", "Thermodynamics", "thermo", "Physical chemistry", "Introductory"],
-  [
-    "F5",
-    "Kinetics and equilibrium",
-    "equilibrium",
-    "Physical chemistry",
-    "Introductory",
-  ],
-  [
-    "F6",
-    "Acids, bases and buffers",
-    "acids",
-    "Physical chemistry",
-    "Introductory",
-  ],
-  ["F7", "Electrochemistry", "cells", "Physical chemistry", "Introductory"],
-  [
-    "O1",
-    "Alkanes and nomenclature",
-    "organicBasics",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O2",
-    "Stereochemistry",
-    "stereochemistry",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O3",
-    "Nucleophilic substitution",
-    "substitution",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O4",
-    "Elimination reactions",
-    "elimination",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O5",
-    "Alkenes and addition",
-    "hydrocarbons",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  ["O6", "Alkynes", "alkynes", "Organic chemistry I", "Introductory"],
-  [
-    "O7",
-    "Alcohols and ethers",
-    "alcohols",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O8",
-    "Spectroscopic structure determination",
-    "spectroscopy",
-    "Organic chemistry I",
-    "Introductory",
-  ],
-  [
-    "O9",
-    "Conjugated systems",
-    "conjugation",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O10",
-    "Aromaticity and aromatic substitution",
-    "aromatic",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O11",
-    "Aldehydes and ketones",
-    "carbonyl",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O12",
-    "Carboxylic acids and derivatives",
-    "carboxyl",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O13",
-    "Enols, enolates and condensations",
-    "enolates",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O14",
-    "Amines and amides",
-    "amines",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O15",
-    "Polymers and materials",
-    "polymers",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "O16",
-    "Synthesis and selectivity",
-    "synthesis",
-    "Organic chemistry II",
-    "Intermediate",
-  ],
-  [
-    "I1",
-    "Coordination chemistry",
-    "transition",
-    "Inorganic chemistry",
-    "Introductory",
-  ],
-  [
-    "L1",
-    "Experimental design and uncertainty",
-    "practical",
-    "Laboratory methods",
-    "Introductory",
-  ],
-];
 const makeModules = (course: CourseId, entries: Entry[]): Module[] =>
   entries.map(([code, title, lessonKey, group, level], i) => ({
     id: `${course}-${code}`,
@@ -1411,14 +1240,6 @@ export const COURSES: Record<
     note: "Current Structure/Reactivity framework. SL + HL modules include additional HL requirements in the official guide; the introductory notes do not replace those detailed outcomes. Retired options are excluded.",
     modules: makeModules("IB", ib),
     sources: [SOURCES.ib, SOURCES.smeIB, SOURCES.ibchem],
-  },
-  UNDERGRAD: {
-    name: "Undergraduate chemistry",
-    shortName: "Undergraduate",
-    version: "Introductory pathway",
-    note: "An introductory pathway across general, organic, and inorganic chemistry, not an accredited university syllabus. Use your institution’s course requirements for assessment coverage.",
-    modules: makeModules("UNDERGRAD", ug),
-    sources: [SOURCES.general, SOURCES.organic],
   },
 };
 export function getStudyGuide(module: Module, course: CourseId): StudyGuide {

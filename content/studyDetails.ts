@@ -815,8 +815,6 @@ export function extraCards(key: string, moduleId: string): Flashcard[] {
     entries = DETAILS.energy.concat(DETAILS.hydrocarbons.slice(4));
   if (moduleId === "ALEVEL-32")
     entries = DETAILS.alcohols.concat(DETAILS.aromatic.slice(4));
-  if (moduleId === "UNDERGRAD-F5")
-    entries = DETAILS.equilibrium.concat(DETAILS.kinetics);
   return entries.map(([term, definition], i) => ({
     id: `${moduleId}:extra:${i}`,
     term,

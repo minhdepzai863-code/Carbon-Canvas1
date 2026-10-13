@@ -6,9 +6,13 @@ An interactive organic chemistry learning app with molecular visualization, two-
 
 The independent Node/PostgreSQL backend is in `backend/`. See [setup, security and integration instructions](backend/README.md). Better Auth provides email/password registration, verification, reset, fixed-expiry database sessions and protected study-data APIs. Supabase Postgres setup is prepared, but no cloud project or SMTP service is configured yet. No authentication UI was added.
 
-Practice now uses a local deterministic answer-key bank rather than generating every quiz with AI. Source filters distinguish original recall questions from seven licensed MIT 5.111 paper adaptations; external Cambridge/IB/PapaCambridge/IB Docs/Revision Village papers remain links, not a copied archive. Sources were checked in October 2026; this is not a complete question bank through 2026. MIT adaptations require compatible noncommercial use and carry [CC BY-NC-SA attribution](content/OPEN_CONTENT_LICENSE.md).
+Practice offers CIE past papers separately from original module recall. Its checked PapaCambridge catalogue contains 352 question papers from 2018–2026: 63 multiple-choice papers (2,520 questions with complete 40-answer markscheme keys) and 289 free-response/practical papers. Students choose format, year, session, paper type and variant. The source-hosted PDFs preserve diagrams, equations and numbering; this is paper-based practice, not extracted/retyped individual questions or a topic-mapped official bank. October/November 2026 was not listed on 14 October 2026.
 
-All 88 modules now have 8–13 original explanatory cards, with more teaching detail and some worked examples. Flashcards support search, round size, review filtering, custom cards and persistent browser recall state. Theme, stylesheet and page layout are unchanged. Guest data stays local; authenticated cloud synchronization requires wiring the documented APIs to an existing login flow after provisioning. Protected API practice grades are server-computed; local guest scores are not tamper-proof official examination grades.
+For devices without native PDF embedding, load the matching downloaded PDF into the local PDF.js reader. Files stay on the device and are never uploaded. Question-paper hashes verify the local copy against the inspected archive. The reader supports page navigation and accessible extracted text; diagrams/notation must still be checked visually. Original PDFs are private download deliverables outside this repository, not re-hosted by the app. Source availability may change.
+
+All 63 active Cambridge/IB modules have 8–13 original explanatory cards, with more teaching detail and worked examples. Flashcards support search, round size, review filtering, custom cards and persistent browser recall state. Undergraduate is removed; retired selections fall back to Cambridge without erasing old study records. The existing theme is preserved; new practice controls use the same design system.
+
+Paper answers and the latest assessment are stored per paper in this browser. MCQs use deterministic answer-key grading (unanswered items score zero). Free-response answers are saved by question/subpart and self-assessed against the linked markscheme; AI marking is not enabled. Authenticated API MCQ grades are computed server-side and stored with a database-controlled provenance field. Guest grades are editable and not authoritative. Cloud synchronization still requires provisioning and the documented frontend API integration.
 
 ## Run locally
 
@@ -33,7 +37,6 @@ The interface uses a shared mineral-grey / petrol / copper design system and sel
 
 - Cambridge 9701: all 37 theory-topic headings for the 2025–2027 syllabus, with separate AS/A2 lab-assessment entries. Topic-specific notes distinguish AS nitriles and IR/MS from A2 amines, acyl chemistry, and NMR.
 - IB: current Structure/Reactivity framework, first assessment 2025; retired optional units are excluded. SL/HL labels describe module scope, not exhaustive learning-outcome coverage.
-- Undergraduate: an introductory general/organic/inorganic pathway, not an accredited university syllabus.
 
 Notes and flashcards are original concise starting points, not a complete textbook or exam-board endorsement. Each module links its course authority and textbook references. ZNotes and Save My Exams are external revision resources; their notes, images, and question banks are not reproduced. Dates and references were reviewed on 14 October 2026.
 
@@ -43,7 +46,7 @@ RDKit.js 2026.9.1 parses SMILES, checks supported valence and aromaticity, prese
 
 The former force-layout angle tool has been removed. Screen coordinates are not physical bond angles. Reference geometry values are cited separately: linear 180°, trigonal planar approximately 120°, methane 109.5°, water 104.5°, and ammonia approximately 107°. No arbitrary AI-generated molecule is assigned a measured geometry or point group.
 
-Reaction predictions check integer-coefficient formula equations for atom and charge balance and require the product graph’s formula to appear among the equation products. Unbalanced results are rejected; unsupported notation is labelled qualitative. Passing these checks does not prove that a reaction occurs, identify a unique isomer, or validate an AI mechanism. Model confidence is not a calibrated experimental probability. Tutor and practice answers remain explicitly AI-generated.
+Reaction predictions check integer-coefficient formula equations for atom and charge balance and require the product graph’s formula to appear among the equation products. Unbalanced results are rejected; unsupported notation is labelled qualitative. Passing these checks does not prove that a reaction occurs, identify a unique isomer, or validate an AI mechanism. Model confidence is not a calibrated experimental probability. Tutor responses are AI-generated; practice is labelled original recall or original source-hosted past paper.
 
 PubChem’s rate-limited Science Skills wrapper was attempted during this update but returned a browser challenge. No live PubChem identity-validation claim is made. Reference structures are authored examples linked to textbook explanations.
 
@@ -55,5 +58,6 @@ Run the reproducible chemistry/content regression suite with `npm run verify:che
 - [IB official chemistry curriculum](https://www.ibo.org/programmes/diploma-programme/curriculum/sciences/chemistry/)
 - [OpenStax Chemistry 2e](https://openstax.org/details/books/chemistry-2e) and [McMurry Organic Chemistry](https://openstax.org/details/books/organic-chemistry), for factual reference checks and external reading links. Scientific facts are explained in original short notes; textbook passages and figures are not copied.
 - [RDKit.js](https://www.rdkitjs.com/), BSD-3-Clause, and [Source Sans 3](https://github.com/adobe-fonts/source-sans), SIL Open Font License.
+- [PDF.js](https://mozilla.github.io/pdf.js/), Apache-2.0, for local-only paper rendering.
 - Design guidance: [Anthropic frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design), [Impeccable](https://github.com/pbakaus/impeccable), and installed resources from [awesome-codex-skills](https://github.com/LeorickCoder/awesome-codex-skills).
 - Scientific Agent Skills informed graph validation and evidence/claim separation: Kassis, T., Agarwal, V., He, Y., Patel, D., & Brueckner, A. M. (2026), [Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents](https://doi.org/10.48550/arXiv.2609.00065).

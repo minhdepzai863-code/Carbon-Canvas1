@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Atom,
   BookOpen,
@@ -47,6 +55,7 @@ import { normalizeMolecule } from "./services/chemistry";
 import * as gemini from "./services/geminiService";
 import MoleculeVisualizer from "./components/MoleculeVisualizer";
 import Flashcards from "./components/Flashcards";
+const PastPaperPractice = lazy(() => import("./components/PastPaperPractice"));
 import SourceList from "./components/SourceList";
 import { SCIENCE_SKILLS } from "./scienceSkills";
 
@@ -268,8 +277,9 @@ export default function App() {
   const [view, setView] = useState(AppView.DASHBOARD);
   const [mobileNav, setMobileNav] = useState(false);
   const [courseId, setCourseId] = useState<CourseId>(() => {
-    const saved = readSaved<CourseId>("cc-course-v2", "ALEVEL");
-    return COURSES[saved] ? saved : "ALEVEL";
+    const saved = readSaved<unknown>("cc-course-v2", "ALEVEL");
+    // Retired or corrupt selections fall back without deleting old study data.
+    return saved === "IB" ? "IB" : "ALEVEL";
   });
   const course = COURSES[courseId];
   const [selectedId, setSelectedId] = useState(course.modules[0].id);
@@ -308,11 +318,8 @@ export default function App() {
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [practiceCount, setPracticeCount] = useState(10);
-  const [practiceSource, setPracticeSource] = useState<
-    "mixed" | "past-paper" | "original"
-  >(courseId === "UNDERGRAD" ? "past-paper" : "original");
-  const [includeOpenPapers, setIncludeOpenPapers] = useState(
-    import.meta.env.DEV || import.meta.env.VITE_NONCOMMERCIAL_OCW === "true",
+  const [practiceMode, setPracticeMode] = useState<"papers" | "recall">(
+    "papers",
   );
   const [quizIndex, setQuizIndex] = useState(0);
   const [answer, setAnswer] = useState<string | null>(null);
@@ -392,7 +399,6 @@ export default function App() {
   };
   const chooseCourse = (id: CourseId) => {
     setCourseId(id);
-    setPracticeSource(id === "UNDERGRAD" ? "past-paper" : "original");
     selectModule(COURSES[id].modules[0].id);
     setStudyTab("notes");
     setQuery("");
@@ -486,8 +492,7 @@ export default function App() {
           courseId,
           selected.id,
           practiceCount,
-          includeOpenPapers,
-          practiceSource,
+          "original",
         ),
       };
       if (
@@ -500,7 +505,7 @@ export default function App() {
         )
       )
         throw new Error(
-          "No licensed past-paper items are included for this module. Choose Original recall bank or use the linked paper and markscheme. For MIT adaptations, also enable noncommercial study.",
+          "No licensed past-paper items are included for this module. Choose Original recall bank or use the linked paper and markscheme.",
         );
       if (request === quizRequest.current) setQuiz(result);
     } catch (err) {
@@ -681,7 +686,6 @@ export default function App() {
             >
               <option value="ALEVEL">Cambridge 9701</option>
               <option value="IB">IB Diploma</option>
-              <option value="UNDERGRAD">Undergraduate</option>
             </select>
           </label>
         </header>
@@ -1349,227 +1353,238 @@ export default function App() {
             <>
               <PageHeading
                 title="Practice questions"
-                description="Check your understanding against the active module’s core ideas."
+                description="Revise from original past papers or practise the active module’s core ideas."
               />
-              <div className="practice-layout">
-                <aside className="practice-context">
-                  <h2>{selected.title}</h2>
-                  <p>
-                    {course.name} / {selected.level}
-                  </p>
-                  <label>
-                    Practice module
-                    <select
-                      value={selected.id}
-                      disabled={quizLoading || (!!quiz && !quizDone)}
-                      onChange={(e) => {
-                        selectModule(e.target.value);
-                      }}
-                    >
-                      {course.modules.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.code} — {m.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <p className="fine-print">
-                    Answer-key grading. Original recall questions and labelled
-                    open-paper adaptations; not a complete official bank through
-                    2026. Guest scores are stored in this browser.
-                  </p>
-                  <label>
-                    Questions per set
-                    <select
-                      value={practiceCount}
-                      disabled={!!quiz && !quizDone}
-                      onChange={(e) => setPracticeCount(Number(e.target.value))}
-                    >
-                      {[5, 10, 20, 40].map((n) => (
-                        <option key={n} value={n}>
-                          {n} (up to available bank size)
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Question source
-                    <select
-                      value={practiceSource}
-                      disabled={!!quiz && !quizDone}
-                      onChange={(e) =>
-                        setPracticeSource(
-                          e.target.value as "mixed" | "past-paper" | "original",
-                        )
-                      }
-                    >
-                      <option value="original">Original recall bank</option>
-                      <option value="past-paper">
-                        Licensed past-paper adaptations only
-                      </option>
-                      <option value="mixed">
-                        Original &amp; licensed items
-                      </option>
-                    </select>
-                  </label>
-                  {courseId === "UNDERGRAD" && (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={includeOpenPapers}
-                        disabled={!!quiz && !quizDone}
-                        onChange={(e) => setIncludeOpenPapers(e.target.checked)}
-                      />{" "}
-                      Include MIT open-paper adaptations for noncommercial study
-                      (CC BY-NC-SA)
-                    </label>
-                  )}
-                  <details>
-                    <summary>
-                      Past papers &amp; markschemes through 2026
-                    </summary>
-                    <p className="fine-print">
-                      Catalogue links, not a claim that all 2026 papers are
-                      available. External papers can be marked against their
-                      linked schemes; protected paper text is not copied here.
-                    </p>
-                    <SourceList
-                      sources={paperSources.filter(
-                        (s) => s.course === courseId,
-                      )}
-                    />
-                  </details>
-                </aside>
-                <section className="quiz-panel">
-                  {!quiz ? (
-                    <div className="empty-state">
-                      <h2>Make the ideas stick</h2>
+              {courseId === "ALEVEL" && (
+                <div
+                  className="article-tabs paper-modes"
+                  role="group"
+                  aria-label="Practice mode"
+                >
+                  <button
+                    aria-pressed={practiceMode === "papers"}
+                    onClick={() => setPracticeMode("papers")}
+                  >
+                    CIE past papers
+                  </button>
+                  <button
+                    aria-pressed={practiceMode === "recall"}
+                    onClick={() => setPracticeMode("recall")}
+                  >
+                    Module recall
+                  </button>
+                </div>
+              )}
+              {courseId === "ALEVEL" && practiceMode === "papers" ? (
+                <Suspense
+                  fallback={<p role="status">Loading past-paper practice…</p>}
+                >
+                  <PastPaperPractice />
+                </Suspense>
+              ) : (
+                <>
+                  <div className="practice-layout">
+                    <aside className="practice-context">
+                      <h2>{selected.title}</h2>
                       <p>
-                        Draw a set from the module bank. Answers are checked
-                        against a fixed key, with explanations and paper
-                        provenance where applicable.
+                        {course.name} / {selected.level}
                       </p>
-                      <Button
-                        onClick={() => void startQuiz()}
-                        disabled={quizLoading}
-                      >
-                        {quizLoading ? (
-                          <Loader2 size={17} className="spin" />
-                        ) : (
-                          <Pencil size={17} />
-                        )}{" "}
-                        Start practice set
-                      </Button>
-                    </div>
-                  ) : quizDone ? (
-                    <div className="quiz-finish">
-                      <Check size={30} />
-                      <h2>Practice complete</h2>
-                      <div className="quiz-result-score">
-                        {score} / {quiz.questions.length}
-                      </div>
-                      <p>
-                        {Math.round((score / quiz.questions.length) * 100)}%
-                        correct. Revisit the source notes to work through missed
-                        ideas.
+                      <label>
+                        Practice module
+                        <select
+                          value={selected.id}
+                          disabled={quizLoading || (!!quiz && !quizDone)}
+                          onChange={(e) => {
+                            selectModule(e.target.value);
+                          }}
+                        >
+                          {course.modules.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.code} — {m.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="fine-print">
+                        Answer-key grading of original module recall questions.
+                        These are not official past-paper items. Guest scores
+                        are stored in this browser.
                       </p>
-                      <Button onClick={() => void startQuiz()}>
-                        New practice set
-                      </Button>
-                      <Button
-                        secondary
-                        onClick={() => navigate(AppView.STUDY_HUB)}
-                      >
-                        Return to notes
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="question-position">
-                        <span>
-                          Question {quizIndex + 1} of {quiz.questions.length}
-                        </span>
-                        <span>{score} correct</span>
-                      </div>
-                      <progress
-                        value={quizIndex + 1}
-                        max={quiz.questions.length}
-                        aria-label="Question progress"
-                      />
-                      <h2>{quiz.questions[quizIndex].question}</h2>
-                      {quiz.questions[quizIndex].source && (
+                      <label>
+                        Questions per set
+                        <select
+                          value={practiceCount}
+                          disabled={!!quiz && !quizDone}
+                          onChange={(e) =>
+                            setPracticeCount(Number(e.target.value))
+                          }
+                        >
+                          {[5, 10, 20, 40].map((n) => (
+                            <option key={n} value={n}>
+                              {n} (up to available bank size)
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <details>
+                        <summary>
+                          Past papers &amp; markschemes through 2026
+                        </summary>
                         <p className="fine-print">
-                          <a
-                            href={quiz.questions[quizIndex].source!.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {quiz.questions[quizIndex].source!.title}
-                          </a>{" "}
-                          ·{" "}
-                          {quiz.questions[quizIndex].source!.kind ===
-                          "adapted-past-paper"
-                            ? "Adapted past-paper item"
-                            : "Original recall item"}{" "}
-                          · {quiz.questions[quizIndex].source!.license}
+                          Catalogue links, not a claim that all 2026 papers are
+                          available. External papers can be marked against their
+                          linked schemes; protected paper text is not copied
+                          here.
                         </p>
-                      )}
-                      <div className="quiz-options">
-                        {quiz.questions[quizIndex].options?.map((option, i) => (
-                          <button
-                            key={option}
-                            disabled={answer !== null}
-                            className={
-                              "quiz-option" +
-                              (answer !== null &&
-                              option === quiz.questions[quizIndex].correctAnswer
-                                ? " correct"
-                                : answer === option
-                                  ? " incorrect"
-                                  : "")
-                            }
-                            onClick={() => {
-                              setAnswer(option);
-                              if (
-                                option ===
-                                quiz.questions[quizIndex].correctAnswer
-                              )
-                                setScore((s) => s + 1);
-                            }}
-                          >
-                            <span>{String.fromCharCode(65 + i)}</span>
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                      {answer !== null && (
-                        <div className="answer-explanation">
-                          <h3>
-                            {answer === quiz.questions[quizIndex].correctAnswer
-                              ? "Correct"
-                              : "Review this idea"}
-                          </h3>
-                          <p>{quiz.questions[quizIndex].explanation}</p>
-                          {quiz.questions[quizIndex].source?.attribution && (
-                            <p className="fine-print">
-                              {quiz.questions[quizIndex].source!.attribution}
-                            </p>
+                        <SourceList
+                          sources={paperSources.filter(
+                            (s) => s.course === courseId,
                           )}
+                        />
+                      </details>
+                    </aside>
+                    <section className="quiz-panel">
+                      {!quiz ? (
+                        <div className="empty-state">
+                          <h2>Make the ideas stick</h2>
                           <p>
-                            Answer: {quiz.questions[quizIndex].correctAnswer}
+                            Draw a set from the module bank. Answers are checked
+                            against a fixed key, with explanations and paper
+                            provenance where applicable.
                           </p>
-                          <Button onClick={nextQuestion}>
-                            {quizIndex === quiz.questions.length - 1
-                              ? "Finish practice"
-                              : "Next question"}{" "}
-                            <ArrowRight size={16} />
+                          <Button
+                            onClick={() => void startQuiz()}
+                            disabled={quizLoading}
+                          >
+                            {quizLoading ? (
+                              <Loader2 size={17} className="spin" />
+                            ) : (
+                              <Pencil size={17} />
+                            )}{" "}
+                            Start practice set
                           </Button>
                         </div>
+                      ) : quizDone ? (
+                        <div className="quiz-finish">
+                          <Check size={30} />
+                          <h2>Practice complete</h2>
+                          <div className="quiz-result-score">
+                            {score} / {quiz.questions.length}
+                          </div>
+                          <p>
+                            {Math.round((score / quiz.questions.length) * 100)}%
+                            correct. Revisit the source notes to work through
+                            missed ideas.
+                          </p>
+                          <Button onClick={() => void startQuiz()}>
+                            New practice set
+                          </Button>
+                          <Button
+                            secondary
+                            onClick={() => navigate(AppView.STUDY_HUB)}
+                          >
+                            Return to notes
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="question-position">
+                            <span>
+                              Question {quizIndex + 1} of{" "}
+                              {quiz.questions.length}
+                            </span>
+                            <span>{score} correct</span>
+                          </div>
+                          <progress
+                            value={quizIndex + 1}
+                            max={quiz.questions.length}
+                            aria-label="Question progress"
+                          />
+                          <h2>{quiz.questions[quizIndex].question}</h2>
+                          {quiz.questions[quizIndex].source && (
+                            <p className="fine-print">
+                              <a
+                                href={quiz.questions[quizIndex].source!.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {quiz.questions[quizIndex].source!.title}
+                              </a>{" "}
+                              ·{" "}
+                              {quiz.questions[quizIndex].source!.kind ===
+                              "adapted-past-paper"
+                                ? "Adapted past-paper item"
+                                : "Original recall item"}{" "}
+                              · {quiz.questions[quizIndex].source!.license}
+                            </p>
+                          )}
+                          <div className="quiz-options">
+                            {quiz.questions[quizIndex].options?.map(
+                              (option, i) => (
+                                <button
+                                  key={option}
+                                  disabled={answer !== null}
+                                  className={
+                                    "quiz-option" +
+                                    (answer !== null &&
+                                    option ===
+                                      quiz.questions[quizIndex].correctAnswer
+                                      ? " correct"
+                                      : answer === option
+                                        ? " incorrect"
+                                        : "")
+                                  }
+                                  onClick={() => {
+                                    setAnswer(option);
+                                    if (
+                                      option ===
+                                      quiz.questions[quizIndex].correctAnswer
+                                    )
+                                      setScore((s) => s + 1);
+                                  }}
+                                >
+                                  <span>{String.fromCharCode(65 + i)}</span>
+                                  {option}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                          {answer !== null && (
+                            <div className="answer-explanation">
+                              <h3>
+                                {answer ===
+                                quiz.questions[quizIndex].correctAnswer
+                                  ? "Correct"
+                                  : "Review this idea"}
+                              </h3>
+                              <p>{quiz.questions[quizIndex].explanation}</p>
+                              {quiz.questions[quizIndex].source
+                                ?.attribution && (
+                                <p className="fine-print">
+                                  {
+                                    quiz.questions[quizIndex].source!
+                                      .attribution
+                                  }
+                                </p>
+                              )}
+                              <p>
+                                Answer:{" "}
+                                {quiz.questions[quizIndex].correctAnswer}
+                              </p>
+                              <Button onClick={nextQuestion}>
+                                {quizIndex === quiz.questions.length - 1
+                                  ? "Finish practice"
+                                  : "Next question"}{" "}
+                                <ArrowRight size={16} />
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                </section>
-              </div>
+                    </section>
+                  </div>
+                </>
+              )}
             </>
           )}
           {view === AppView.CHAT_TUTOR && (

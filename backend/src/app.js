@@ -13,6 +13,11 @@ import {
   drawPracticeSet,
   paperSources,
 } from "../../content/questionBank.ts";
+import {
+  PAST_PAPERS,
+  publicPaper,
+  gradeMcqPaper,
+} from "../../content/pastPapers.ts";
 
 const email = z
   .string()
@@ -50,7 +55,7 @@ const authBodies = {
     .object({ email, callbackURL: origin.optional() })
     .strict(),
 };
-const course = z.enum(["ALEVEL", "IB", "UNDERGRAD"]);
+const course = z.enum(["ALEVEL", "IB"]);
 const moduleBody = z.object({ course, moduleId: z.string().min(1).max(64) });
 const stateBody = z
   .object({
@@ -130,12 +135,10 @@ export function createApp(pool, config) {
         .status(403)
         .json({ code: "ORIGIN_REQUIRED", error: "Origin header required" });
     if (req.headers["sec-fetch-site"] === "cross-site")
-      return res
-        .status(403)
-        .json({
-          code: "CROSS_SITE_REQUEST",
-          error: "Use a same-site API deployment",
-        });
+      return res.status(403).json({
+        code: "CROSS_SITE_REQUEST",
+        error: "Use a same-site API deployment",
+      });
     next();
   });
   app.use(
@@ -213,6 +216,25 @@ export function createApp(pool, config) {
     res.status(response.status).send(await response.text());
   });
   // Public reading data has no private answers/session information.
+  app.get("/api/papers", (req, res) => {
+    const value = z
+      .object({
+        format: z.enum(["mcq", "frq"]).optional(),
+        year: z.coerce.number().int().min(2018).max(2026).optional(),
+        session: z.enum(["march", "may-june", "oct-nov"]).optional(),
+      })
+      .strict()
+      .parse(req.query);
+    res.json({
+      checkedOn: "2026-10-14",
+      papers: PAST_PAPERS.filter(
+        (p) =>
+          (!value.format || p.format === value.format) &&
+          (!value.year || p.year === value.year) &&
+          (!value.session || p.session === value.session),
+      ).map(publicPaper),
+    });
+  });
   app.get("/api/curricula", (_req, res) =>
     res.json(
       Object.fromEntries(
@@ -247,12 +269,10 @@ export function createApp(pool, config) {
         .status(401)
         .json({ code: "UNAUTHENTICATED", error: "Sign in to continue" });
     if (!session.user.emailVerified)
-      return res
-        .status(403)
-        .json({
-          code: "EMAIL_UNVERIFIED",
-          error: "Verify your email before continuing",
-        });
+      return res.status(403).json({
+        code: "EMAIL_UNVERIFIED",
+        error: "Verify your email before continuing",
+      });
     res.locals.userId = session.user.id;
     res.locals.user = session.user;
     res.locals.expiresAt = session.session.expiresAt;
@@ -449,11 +469,7 @@ export function createApp(pool, config) {
       .parse(req.query);
     requireModule(value);
     res.json({
-      questions: getQuestionBank(
-        value.course,
-        value.moduleId,
-        config.NONCOMMERCIAL_OCW === "true",
-      )
+      questions: getQuestionBank(value.course, value.moduleId)
         .slice(0, value.limit)
         .map(publicQuestion),
       sources: paperSources.filter((s) => s.course === value.course),
@@ -461,6 +477,48 @@ export function createApp(pool, config) {
       coverage:
         "Not a complete archive through 2026; original items and licensed subsets only",
     });
+  });
+  app.post("/api/papers/:id/grade", async (req, res) => {
+    const id = z
+      .string()
+      .regex(/^9701_[msw](?:18|19|2[0-6])_qp_1[1-9]$/)
+      .parse(req.params.id);
+    const value = z
+      .object({
+        answers: z.record(
+          z.string().regex(/^(?:[1-9]|[1-3][0-9]|40)$/),
+          z.enum(["A", "B", "C", "D"]),
+        ),
+      })
+      .strict()
+      .parse(req.body);
+    const paper = PAST_PAPERS.find((p) => p.id === id);
+    if (!paper || !paper.answerKey)
+      throw new HttpError(
+        404,
+        "NO_ANSWER_KEY",
+        "No verified key for this paper",
+      );
+    const result = gradeMcqPaper(paper, value.answers);
+    const attemptId = randomUUID();
+    await withUser(pool, res.locals.userId, (db) =>
+      db.query(
+        "INSERT INTO cc_app.paper_attempts(id,user_id,paper_id,marks,maximum,feedback,grading_method) VALUES($1,$2,$3,$4,$5,$6,'markscheme-answer-key')",
+        [
+          attemptId,
+          res.locals.userId,
+          paper.id,
+          result.score,
+          result.maximum,
+          JSON.stringify({
+            ...result,
+            answerKeySha256: paper.answerKeySha256,
+            serverComputed: true,
+          }),
+        ],
+      ),
+    );
+    res.status(201).json({ attemptId, ...result });
   });
   app.post("/api/practice/sessions", async (req, res) => {
     const value = moduleBody
@@ -475,7 +533,6 @@ export function createApp(pool, config) {
       value.course,
       value.moduleId,
       value.count,
-      config.NONCOMMERCIAL_OCW === "true",
       value.source,
     );
     if (!questions.length)
@@ -619,7 +676,7 @@ export function createApp(pool, config) {
         async (db) =>
           (
             await db.query(
-              "SELECT id,paper_id,marks,maximum,feedback,created_at FROM cc_app.paper_attempts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
+              "SELECT id,paper_id,marks,maximum,feedback,grading_method,created_at FROM cc_app.paper_attempts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
               [res.locals.userId],
             )
           ).rows,
@@ -631,13 +688,11 @@ export function createApp(pool, config) {
   );
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError)
-      return res
-        .status(400)
-        .json({
-          code: "INVALID_INPUT",
-          error: "Invalid request data",
-          fields: [...new Set(error.issues.map((i) => i.path.join(".")))],
-        });
+      return res.status(400).json({
+        code: "INVALID_INPUT",
+        error: "Invalid request data",
+        fields: [...new Set(error.issues.map((i) => i.path.join(".")))],
+      });
     if (error instanceof HttpError)
       return res
         .status(error.status)
@@ -656,12 +711,10 @@ export function createApp(pool, config) {
       error.name,
       error.code || "INTERNAL",
     );
-    res
-      .status(503)
-      .json({
-        code: "SERVICE_UNAVAILABLE",
-        error: "Service temporarily unavailable",
-      });
+    res.status(503).json({
+      code: "SERVICE_UNAVAILABLE",
+      error: "Service temporarily unavailable",
+    });
   });
   return { app, auth };
 }

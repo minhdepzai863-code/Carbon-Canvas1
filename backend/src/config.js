@@ -18,7 +18,6 @@ export function loadConfig(env = process.env) {
     DATABASE_SSL: z.enum(["true", "false"]).default("true"),
     DATABASE_CA_FILE: z.string().optional(),
     TRUSTED_PROXY_CIDRS: z.string().default(""),
-    NONCOMMERCIAL_OCW: z.enum(["true", "false"]).default("false"),
   });
   const result = schema.safeParse(env);
   if (!result.success)
