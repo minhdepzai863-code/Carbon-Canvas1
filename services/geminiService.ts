@@ -9,6 +9,7 @@ import type {
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
 const model = import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
+const capacityFallbackModel = 'gemini-3.5-flash-lite';
 
 const client = () => {
   if (!apiKey) {
@@ -167,16 +168,24 @@ const parseJson = <T>(text: string | undefined): T => {
 };
 
 const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
-  const response = await client().models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      systemInstruction: 'You are a careful chemistry educator. Distinguish predictions from verified facts, obey valence rules, and never invent citations.',
-      responseMimeType: 'application/json',
-      responseJsonSchema: schema,
-    },
-  });
-  return parseJson<T>(response.text);
+  const request = (modelName: string) => client().models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        systemInstruction: 'You are a careful chemistry educator. Distinguish predictions from verified facts, obey valence rules, and never invent citations.',
+        responseMimeType: 'application/json',
+        responseJsonSchema: schema,
+      },
+    });
+
+  try {
+    return parseJson<T>((await request(model)).text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const capacityError = message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE');
+    if (!capacityError || model === capacityFallbackModel) throw error;
+    return parseJson<T>((await request(capacityFallbackModel)).text);
+  }
 };
 
 const cleanMolecule = (data: MoleculeData) => ({
