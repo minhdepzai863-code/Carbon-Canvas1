@@ -21,7 +21,7 @@ Paper answers and AI feedback are stored per paper/subpart in this browser. MCQs
 3. Configure guest mode using `backend/DEPLOYMENT.md`, then run `npm start` in `backend/`. AI credentials belong only in `backend/.env.local`, never in `VITE_` variables.
 4. Run `npm run dev`.
 
-All AI requests use same-origin backend endpoints and the Vercel AI SDK Google provider. Guest testing uses signed HttpOnly device cookies plus shared device, IP and global quotas. The server defaults to `gemini-3.8-flash`; set server-only `GEMINI_API_KEY` and optional `GEMINI_MODEL`.
+All AI requests use same-origin backend endpoints and the Vercel AI SDK Google provider. Guest testing uses signed HttpOnly device cookies plus shared device, IP and global quotas. The code defaults to `gemini-3.8-flash`; this testing deployment selects `gemini-3.5-flash-lite` because the 3.8 Flash free-tier daily allowance was exhausted during verification. Both are configurable through server-only `GEMINI_MODEL`; no automatic paid upgrade is performed.
 
 ## Security
 

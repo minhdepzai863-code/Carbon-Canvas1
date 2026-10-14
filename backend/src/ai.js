@@ -33,15 +33,27 @@ export async function runModel(
       "The server AI service is not configured yet. Your work is saved locally.",
     );
   const provider = createGoogleGenerativeAI({ apiKey: config.GEMINI_API_KEY });
-  const { output, text } = await generateText({
-    model: provider(config.GEMINI_MODEL || "gemini-3.8-flash"),
-    system,
-    ...(messages ? { messages } : { prompt }),
-    ...(schema ? { output: Output.object({ schema }) } : {}),
-    maxOutputTokens: 7000,
-    maxRetries: 0,
-    abortSignal: AbortSignal.timeout(90000),
-  });
+  let generated;
+  try {
+    generated = await generateText({
+      model: provider(config.GEMINI_MODEL || "gemini-3.8-flash"),
+      system,
+      ...(messages ? { messages } : { prompt }),
+      ...(schema ? { output: Output.object({ schema }) } : {}),
+      maxOutputTokens: 7000,
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(90000),
+    });
+  } catch (error) {
+    if (error.statusCode === 429)
+      throw new AIError(
+        429,
+        "PROVIDER_RATE_LIMITED",
+        "Google's model allowance is reached. Try again after its quota resets; your answer and local work are unchanged.",
+      );
+    throw error;
+  }
+  const { output, text } = generated;
   return schema ? output : text;
 }
 
