@@ -3,9 +3,14 @@
 @import "@fontsource/source-sans-3/500.css";
 @import "@fontsource/source-sans-3/600.css";
 @import "@fontsource/source-sans-3/700.css";
+@import "@fontsource/stix-two-text/400.css";
+@import "@fontsource/stix-two-text/600.css";
+@import "@fontsource/stix-two-math/400.css";
+@import "katex/dist/katex.min.css";
 @import "tailwindcss";
 
 :root {
+  --reading-font: "STIX Two Text", "STIX Two Math", serif;
   --ground: #edf1f0;
   --paper: #fff;
   --raised: #f5f7f6;
@@ -22,6 +27,91 @@
   color: var(--ink);
   background: var(--ground);
   font-synthesis: none;
+}
+.lesson-reading {
+  font-family: var(--reading-font);
+  font-size: 1.12rem;
+  line-height: 1.8;
+  max-width: 75ch;
+}
+.lesson-reading h3 {
+  font-family: "Source Sans 3", sans-serif;
+  line-height: 1.4;
+  margin-top: 1.8rem;
+}
+.lesson-kicker {
+  font-family: "Source Sans 3", sans-serif;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.lesson-figure {
+  margin: 1.6rem 0;
+  border-block: 1px solid var(--line);
+  padding: 1.3rem 0;
+}
+.lesson-figure svg {
+  width: 100%;
+  max-height: 260px;
+  color: var(--ink);
+  font-family: "Source Sans 3", sans-serif;
+}
+.lesson-figure figcaption {
+  margin-top: 0.7rem;
+  color: var(--muted);
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.concept-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: center;
+  font-family: "Source Sans 3", sans-serif;
+  line-height: 1.6;
+}
+.worked-example {
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.5rem;
+  background: var(--raised);
+  margin-block: 2rem;
+}
+.worked-example h3 {
+  margin-top: 0.7rem;
+}
+.worked-example li,
+.lesson-route li {
+  padding-left: 0.4rem;
+  margin-block: 0.6rem;
+}
+.example-answer {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.chemical-notation {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+.chemical-notation .katex {
+  font-size: 1.05em;
+}
+@media (max-width: 700px) {
+  .lesson-reading {
+    font-size: 1.03rem;
+  }
+  .concept-flow {
+    gap: 0.35rem;
+    font-size: 0.85rem;
+  }
+  .worked-example {
+    padding: 0.8rem 1rem;
+  }
+  .article-tabs {
+    flex-wrap: wrap;
+  }
 }
 :root[data-theme="night"] {
   --ground: #152529;
@@ -1995,6 +2085,88 @@ progress::-moz-progress-bar {
 }
 .local-paper-reader {
   margin: 18px 0;
+}
+.annotated-page {
+  position: relative;
+  background: white;
+}
+.paper-ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.paper-ink.tool-pan {
+  pointer-events: none;
+}
+.paper-ink.tool-pen,
+.paper-ink.tool-erase {
+  touch-action: none;
+  cursor: crosshair;
+}
+.annotation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block: 1rem;
+}
+.annotation-toolbar [role="group"] {
+  display: flex;
+  gap: 0.3rem;
+}
+.annotation-toolbar button[aria-pressed="true"] {
+  background: var(--selected);
+  border-color: var(--petrol);
+}
+.annotation-toolbar .button {
+  min-height: 44px;
+}
+.ai-marking {
+  border-top: 1px solid var(--line);
+  padding-top: 1.2rem;
+  margin-top: 1.5rem;
+}
+.confirmation-check {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+.confirmation-check input {
+  width: 20px;
+  height: 20px;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+.transcription-review {
+  padding: 1rem;
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+.marking-result {
+  padding: 1rem;
+  margin-top: 1rem;
+  background: var(--selected);
+}
+.source-preview {
+  margin-block: 1rem;
+}
+.paper-context select {
+  max-width: 100%;
+}
+.paper-panel,
+.practice-context,
+.study-article {
+  min-width: 0;
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .practice-layout {
+    grid-template-columns: minmax(185px, 0.65fr) minmax(0, 2fr);
+    gap: 1.25rem;
+  }
+  .paper-panel {
+    padding: 1.4rem;
+  }
 }
 .paper-canvas {
   display: block;

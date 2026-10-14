@@ -4,28 +4,28 @@ An interactive organic chemistry learning app with molecular visualization, two-
 
 ## Authentication backend and expanded practice
 
-The independent Node/PostgreSQL backend is in `backend/`. See [setup, security and integration instructions](backend/README.md). Better Auth provides email/password registration, verification, reset, fixed-expiry database sessions and protected study-data APIs. Supabase Postgres setup is prepared, but no cloud project or SMTP service is configured yet. No authentication UI was added.
+The independent Node/PostgreSQL backend is in `backend/`. See [setup, security and integration instructions](backend/README.md). Better Auth provides email/password registration, verification, reset, fixed-expiry database sessions and protected study-data APIs. Those APIs are dormant in the current **guest testing mode** (`GUEST_AI_ENABLED=true`), as requested: no app sign-in, email setup or cloud study-data sync is required. The authentication schemas remain installed in the existing Supabase carboncanvas project for future integration; no sign-in/register UI was added.
 
 Practice offers CIE past papers separately from original module recall. Its checked PapaCambridge catalogue contains 352 question papers from 2018–2026: 63 multiple-choice papers (2,520 questions with complete 40-answer markscheme keys) and 289 free-response/practical papers. Students choose format, year, session, paper type and variant. The source-hosted PDFs preserve diagrams, equations and numbering; this is paper-based practice, not extracted/retyped individual questions or a topic-mapped official bank. October/November 2026 was not listed on 14 October 2026.
 
-For devices without native PDF embedding, load the matching downloaded PDF into the local PDF.js reader. Files stay on the device and are never uploaded. Question-paper hashes verify the local copy against the inspected archive. The reader supports page navigation and accessible extracted text; diagrams/notation must still be checked visually. Original PDFs are private download deliverables outside this repository, not re-hosted by the app. Source availability may change.
+Load a checked PDF into the PDF.js reader for navigation, zoom, pen/eraser, undo/redo and annotated export. Question and markscheme hashes verify the file. Up to 20 recently opened PDFs are retained in device-only IndexedDB; ink and answers save separately. Only an explicitly requested ink image is uploaded for AI transcription. Original PDFs are private download deliverables outside this repository, not re-hosted by the app. Source availability may change.
 
-All 63 active Cambridge/IB modules have 8–13 original explanatory cards, with more teaching detail and worked examples. Flashcards support search, round size, review filtering, custom cards and persistent browser recall state. Undergraduate is removed; retired selections fall back to Cambridge without erasing old study records. The existing theme is preserved; new practice controls use the same design system.
+All 63 active Cambridge/IB modules have original guided lessons, worked examples, schematic figures, separate summary notes and 8–13 explanatory cards. Flashcards support search, round size, review filtering, custom cards and persistent browser recall state. Undergraduate is removed; retired selections fall back to Cambridge without erasing old study records. The existing theme is preserved; new practice controls use the same design system.
 
-Paper answers and the latest assessment are stored per paper in this browser. MCQs use deterministic answer-key grading (unanswered items score zero). Free-response answers are saved by question/subpart and self-assessed against the linked markscheme; AI marking is not enabled. Authenticated API MCQ grades are computed server-side and stored with a database-controlled provenance field. Guest grades are editable and not authoritative. Cloud synchronization still requires provisioning and the documented frontend API integration.
+Paper answers and AI feedback are stored per paper/subpart in this browser. MCQs use deterministic answer-key grading (unanswered items score zero). Free-response answers are self-assessed or receive advisory AI marking against the checked matching question PDF and markscheme. Handwriting is transcribed into editable text and must be confirmed before grading; ambiguous responses receive no score. Guest grades are editable and not authoritative. Progress, flashcard reviews/custom cards, saved structures, tutor conversation, reaction inputs, paper answers and ink persist on the device. Clearing browser storage removes this memory; different browsers, devices and deployment origins have separate storage. There is no cloud backup or cross-device sync in guest mode.
 
 ## Run locally
 
-1. Install Node.js 20.19 or newer.
+1. Install Node.js 24.12 or newer.
 2. Run `npm install`.
-3. Copy `.env.example` to `.env.local` and add a Gemini API key from Google AI Studio.
+3. Configure guest mode using `backend/DEPLOYMENT.md`, then run `npm start` in `backend/`. AI credentials belong only in `backend/.env.local`, never in `VITE_` variables.
 4. Run `npm run dev`.
 
-The app uses the current `@google/genai` SDK and defaults to `gemini-3.8-flash`. Set `VITE_GEMINI_MODEL` to override it.
+All AI requests use same-origin backend endpoints and the Vercel AI SDK Google provider. Guest testing uses signed HttpOnly device cookies plus shared device, IP and global quotas. The server defaults to `gemini-3.8-flash`; set server-only `GEMINI_API_KEY` and optional `GEMINI_MODEL`.
 
 ## Security
 
-`VITE_` variables are bundled into browser code. For a public deployment, proxy Gemini requests through a server-side endpoint and keep the production API key there. Never commit `.env.local`.
+`VITE_` variables are bundled into browser code. The implemented proxy keeps the Gemini key server-only. Both private API checks and model quotas are enforced by the backend. Never commit `.env.local`.
 
 ## Science Skills
 
@@ -33,7 +33,7 @@ Study Hub links to relevant workflows from [google-deepmind/science-skills](http
 
 ## Scientific workspace and course content
 
-The interface uses a shared mineral-grey / petrol / copper design system and self-hosted Source Sans 3. Light and night modes, mobile navigation, source-linked notes, and local progress work across all views. `PRODUCT.md` records scope and `DESIGN.md` records implemented tokens.
+The interface uses a shared mineral-grey / petrol / copper design system and self-hosted Source Sans 3 controls, STIX Two Text lesson typography and KaTeX/mhchem scientific notation. Light and night modes, mobile navigation, source-linked notes, and local progress work across all views. `PRODUCT.md` records scope and `DESIGN.md` records implemented tokens.
 
 - Cambridge 9701: all 37 theory-topic headings for the 2025–2027 syllabus, with separate AS/A2 lab-assessment entries. Topic-specific notes distinguish AS nitriles and IR/MS from A2 amines, acyl chemistry, and NMR.
 - IB: current Structure/Reactivity framework, first assessment 2025; retired optional units are excluded. SL/HL labels describe module scope, not exhaustive learning-outcome coverage.
@@ -61,3 +61,8 @@ Run the reproducible chemistry/content regression suite with `npm run verify:che
 - [PDF.js](https://mozilla.github.io/pdf.js/), Apache-2.0, for local-only paper rendering.
 - Design guidance: [Anthropic frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design), [Impeccable](https://github.com/pbakaus/impeccable), and installed resources from [awesome-codex-skills](https://github.com/LeorickCoder/awesome-codex-skills).
 - Scientific Agent Skills informed graph validation and evidence/claim separation: Kassis, T., Agarwal, V., He, Y., Patel, D., & Brueckner, A. M. (2026), [Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents](https://doi.org/10.48550/arXiv.2609.00065).
+
+## Deployment and marking setup
+
+See [the deployment and AI integration checklist](backend/DEPLOYMENT.md). The Vite frontend and independent Node backend use Vercel Services (currently beta). Guest testing uses a Supabase Edge quota service authenticated by the Vercel project's machine JWT; only hashed counters, not answers or model responses, are stored in its database. The browser never receives a database service key or Gemini key. Email/authentication integration is deferred. Smoke tests are not an evaluation of marking accuracy for every paper; compare advisory marks with the original scheme.
+

@@ -5,7 +5,7 @@ export const DETAILS: Record<string, [string, string][]> = {
   atomic: [
     [
       "How do you count particles in an ion?",
-      "Protons equal atomic number Z, neutrons equal A−Z, and electrons equal Z minus the signed charge. Thus 23Na+ has 11 protons, 12 neutrons and 10 electrons. Changing electron count creates an ion, not an isotope.",
+      "Protons equal atomic number Z, neutrons equal A−Z, and electrons equal Z minus the signed charge. Thus $\\ce{^{23}_{11}Na+}$ has 11 protons, 12 neutrons and 10 electrons. Changing electron count creates an ion, not an isotope.",
     ],
     [
       "How is relative atomic mass calculated?",
@@ -17,7 +17,7 @@ export const DETAILS: Record<string, [string, string][]> = {
     ],
     [
       "How do you apply the electron-filling rules?",
-      "Fill lower-energy orbitals first, obey the Pauli principle, and occupy equal-energy orbitals singly before pairing. Nitrogen has 1s2 2s2 2p3 with three unpaired 2p electrons.",
+      "Fill lower-energy orbitals first, obey the Pauli principle, and occupy equal-energy orbitals singly before pairing. Nitrogen has $1s^2\\,2s^2\\,2p^3$ with three unpaired 2p electrons.",
     ],
     [
       "Why can an ionisation-energy trend have exceptions?",
@@ -29,7 +29,7 @@ export const DETAILS: Record<string, [string, string][]> = {
     ],
     [
       "Why are 4s electrons removed before 3d in common cations?",
-      "The filling sequence is not a fixed energy order for every ion. In common first-row transition-metal cations, occupied 4s electrons are removed first: Fe2+ is commonly represented as [Ar]3d6.",
+      "The filling sequence is not a fixed energy order for every ion. In common first-row transition-metal cations, occupied 4s electrons are removed first: $\\ce{Fe^{2+}}$ is commonly represented as $[\\mathrm{Ar}]\\,3d^6$.",
     ],
   ],
   bonding: [

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { api } from "./api";
 import type {
   MoleculeData,
   QuizData,
@@ -12,19 +12,6 @@ import {
   productMatchesEquation,
 } from "./chemistry";
 import { getReference } from "../content/molecules";
-
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
-const model = import.meta.env.VITE_GEMINI_MODEL?.trim() || "gemini-3.8-flash";
-const capacityFallbackModel = "gemini-3.5-flash-lite";
-
-const client = () => {
-  if (!apiKey) {
-    throw new Error(
-      "Missing VITE_GEMINI_API_KEY. Add it to .env.local and restart the app.",
-    );
-  }
-  return new GoogleGenAI({ apiKey });
-};
 
 const bondSchema = {
   type: "object",
@@ -189,35 +176,19 @@ const simulationSchema = {
   ],
 };
 
-const parseJson = <T>(text: string | undefined): T => {
-  if (!text?.trim()) throw new Error("Gemini returned an empty response.");
-  return JSON.parse(text) as T;
-};
-
 const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
-  const request = (modelName: string) =>
-    client().models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: {
-        systemInstruction:
-          "You are a careful chemistry educator. Distinguish predictions from verified facts. All structures must include isomeric SMILES with explicit formal charges and specified stereochemistry only when known. SMILES is the authoritative graph. Do not invent a unique isomer from an ambiguous molecular formula. Do not infer experimental angles or point groups from a 2D drawing. Never invent citations. Reaction feasibility depends on substrate, solvent, catalyst, temperature and time; catalysts do not shift equilibrium. State omitted assumptions.",
-        responseMimeType: "application/json",
-        responseJsonSchema: schema,
-      },
-    });
-
-  try {
-    return parseJson<T>((await request(model)).text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const capacityError =
-      message.includes("503") ||
-      message.includes("high demand") ||
-      message.includes("UNAVAILABLE");
-    if (!capacityError || model === capacityFallbackModel) throw error;
-    return parseJson<T>((await request(capacityFallbackModel)).text);
-  }
+  const kind =
+    schema === moleculeSchema
+      ? "molecule"
+      : schema === quizSchema
+        ? "quiz"
+        : schema === reactionSchema
+          ? "reaction"
+          : schema === studyGuideSchema
+            ? "study"
+            : "simulation";
+  return (await api<{ result: T }>("/api/ai/generate", { kind, prompt }))
+    .result;
 };
 
 const cleanMolecule = (data: MoleculeData) => ({
@@ -371,15 +342,10 @@ export const generateStudyGuide = (topic: string) =>
 export const chatWithTutor = async (
   history: { role: "user" | "model"; parts: { text: string }[] }[],
   message: string,
-) => {
-  const chat = client().chats.create({
-    model,
-    history,
-    config: {
-      systemInstruction:
-        "You are a concise, encouraging organic chemistry tutor. Use correct nomenclature, label uncertainty, and remind users that reaction predictions require experimental verification.",
-    },
-  });
-  const result = await chat.sendMessage({ message });
-  return result.text || "I couldn't produce an answer just now.";
-};
+) =>
+  (
+    await api<{ result: string }>("/api/ai/tutor", {
+      history: history.slice(-12),
+      message,
+    })
+  ).result;

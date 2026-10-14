@@ -7,6 +7,8 @@ import { z } from "zod";
 import { createAuth } from "./auth.js";
 import { createLimiter } from "./rate-limit.js";
 import { withUser } from "./db.js";
+import { installAIRoutes, AIError } from "./ai.js";
+import { createTransport, deliverOne } from "./mail.js";
 import { COURSES, getStudyGuide } from "../../content/curriculum.ts";
 import {
   getQuestionBank,
@@ -108,7 +110,7 @@ function publicQuestion(q) {
   return publicFields;
 }
 
-export function createApp(pool, config) {
+export function createApp(pool, config, aiDependencies = {}) {
   const app = express();
   const auth = createAuth(pool, config);
   const limit = createLimiter(pool, config.BETTER_AUTH_SECRET);
@@ -150,7 +152,10 @@ export function createApp(pool, config) {
       exposedHeaders: ["Retry-After"],
     }),
   );
-  app.use(express.json({ limit: "64kb", strict: true }));
+  const smallJson = express.json({ limit: "64kb", strict: true });
+  app.use((req, res, next) =>
+    req.path.startsWith("/api/ai/") ? next() : smallJson(req, res, next),
+  );
   const authHeaders = (req) => {
     const h = fromNodeHeaders(req.headers);
     h.delete("content-length");
@@ -206,6 +211,19 @@ export function createApp(pool, config) {
       ...(req.method === "POST" ? { body: JSON.stringify(req.body) } : {}),
     });
     const response = await auth.handler(request);
+    if (
+      config.NODE_ENV === "production" &&
+      req.method === "POST" &&
+      [
+        "/sign-up/email",
+        "/send-verification-email",
+        "/request-password-reset",
+      ].includes(path)
+    ) {
+      // Serverless-safe initial delivery: complete one bounded SMTP attempt
+      // within the request. Failed messages remain encrypted for the worker.
+      await deliverOne(pool, config, createTransport(config));
+    }
     const cookies = response.headers.getSetCookie();
     for (const [key, value] of response.headers)
       if (!["set-cookie", "content-length", "cache-control"].includes(key))
@@ -289,6 +307,28 @@ export function createApp(pool, config) {
   });
   app.get("/api/me", (_req, res) =>
     res.json({ user: res.locals.user, expiresAt: res.locals.expiresAt }),
+  );
+  installAIRoutes(app, {
+    pool,
+    config,
+    limit,
+    jsonParser: express.json({ limit: "3mb", strict: true }),
+    ...aiDependencies,
+  });
+  app.get("/api/assessments", async (_req, res) =>
+    res.json(
+      await withUser(
+        pool,
+        res.locals.userId,
+        async (db) =>
+          (
+            await db.query(
+              "SELECT id,paper_id,reference,answer,result,scheme_sha256,model,created_at FROM cc_app.ai_assessments WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
+              [res.locals.userId],
+            )
+          ).rows,
+      ),
+    ),
   );
   app.get("/api/study-state", async (_req, res) => {
     const data = await withUser(
@@ -693,7 +733,7 @@ export function createApp(pool, config) {
         error: "Invalid request data",
         fields: [...new Set(error.issues.map((i) => i.path.join(".")))],
       });
-    if (error instanceof HttpError)
+    if (error instanceof HttpError || error instanceof AIError)
       return res
         .status(error.status)
         .json({ code: error.code, error: error.message });

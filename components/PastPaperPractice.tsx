@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import LocalPaperReader from "./LocalPaperReader";
+import FreeResponseGrading from "./FreeResponseGrading";
 import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import {
   PAST_PAPERS,
@@ -65,6 +66,10 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
   const [localLoaded, setLocalLoaded] = useState(false);
   const localReady = useCallback(() => setLocalLoaded(true), []);
   const [storageError, setStorageError] = useState("");
+  const [inkImage, setInkImage] = useState<{
+    image: string;
+    page: number;
+  } | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem(`cc-paper-v1:${paper.id}`, JSON.stringify(attempt));
@@ -123,6 +128,24 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
         numbering stay in their original PDF layout.
       </p>
       <div className="study-actions">
+        <a
+          className="button secondary"
+          href={`https://pastpapers.papacambridge.com/download_file.php?files=${encodeURIComponent(paper.paperUrl)}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Download question PDF <ExternalLink size={14} />
+        </a>
+        {paper.markschemeUrl && (
+          <a
+            className="button secondary"
+            href={`https://pastpapers.papacambridge.com/download_file.php?files=${encodeURIComponent(paper.markschemeUrl)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download markscheme PDF <ExternalLink size={14} />
+          </a>
+        )}
         <a href={paper.paperUrl} target="_blank" rel="noreferrer">
           Open question paper <ExternalLink size={14} />
         </a>
@@ -152,18 +175,30 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
         filename={
           showScheme ? paper.filename.replace("_qp_", "_ms_") : paper.filename
         }
-        sha256={showScheme ? paper.answerKeySha256 : paper.sha256}
+        sha256={showScheme ? paper.markschemeSha256 : paper.sha256}
         firstPage={showScheme ? 1 : 2}
         onLoaded={localReady}
+        onInk={
+          !showScheme && paper.format === "frq"
+            ? (image, page) => setInkImage({ image, page })
+            : undefined
+        }
       />
       {!localLoaded && (
-        <iframe
-          key={pdfUrl}
-          className="paper-document"
-          src={`${pdfUrl}#page=${showScheme ? 1 : 2}&view=FitH`}
-          title={`${showScheme ? "Markscheme" : "Question paper"}: ${paperLabel(paper)}`}
-          referrerPolicy="no-referrer"
-        />
+        <details className="source-preview">
+          <summary>Preview the source-hosted PDF</summary>
+          <p className="fine-print">
+            Some browsers cannot embed this host. Load the downloaded PDF above
+            for reliable reading and annotation.
+          </p>
+          <iframe
+            key={pdfUrl}
+            className="paper-document"
+            src={`${pdfUrl}#page=${showScheme ? 1 : 2}&view=FitH`}
+            title={`${showScheme ? "Markscheme" : "Question paper"}: ${paperLabel(paper)}`}
+            referrerPolicy="no-referrer"
+          />
+        </details>
       )}
       {storageError && (
         <p role="alert" className="notice error">
@@ -293,8 +328,8 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
           <>
             <h3>Free-response working</h3>
             <p>
-              Save written working by question or subpart. Use the paper for
-              diagrams; record drawings separately. Practical papers require
+              Save written working by question or subpart. Draw or annotate in
+              the PDF above, or type your answer below. Practical papers require
               supervised laboratory work—do not attempt experiments from this
               screen.
             </p>
@@ -349,7 +384,7 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
               <p>
                 Compare each part with the matching scheme, including units,
                 significant figures, method marks and alternatives. This is a
-                self-reported score; automated AI marking is not enabled.
+                self-reported score, independent of advisory AI feedback.
               </p>
               <label>
                 Marks awarded for the whole paper
@@ -413,6 +448,14 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
                 </p>
               )}
             </details>
+            <FreeResponseGrading
+              key={reference}
+              paper={paper}
+              reference={reference}
+              answer={attempt.answers[answerRef] || ""}
+              onAnswer={changeAnswer}
+              ink={inkImage}
+            />
           </>
         )}
       </div>
@@ -440,6 +483,17 @@ export default function PastPaperPractice() {
   const [year, setYear] = useState("all");
   const [session, setSession] = useState("all");
   const [component, setComponent] = useState("all");
+  const availableSessions = new Set(
+    PAST_PAPERS.filter(
+      (p) =>
+        p.format === format &&
+        (year === "all" || p.year === Number(year)) &&
+        (component === "all" || p.component[0] === component),
+    ).map((p) => p.session),
+  );
+  useEffect(() => {
+    if (session !== "all" && !availableSessions.has(session)) setSession("all");
+  }, [format, year, component, session]);
   const [paperId, setPaperId] = useState(() => {
     try {
       return localStorage.getItem("cc-last-paper-v1") || "";
@@ -504,11 +558,13 @@ export default function PastPaperPractice() {
             onChange={(e) => setSession(e.target.value)}
           >
             <option value="all">All sessions</option>
-            {Object.entries(SESSION_NAMES).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
+            {Object.entries(SESSION_NAMES)
+              .filter(([value]) => availableSessions.has(value))
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
           </select>
         </label>
         {format === "frq" && (

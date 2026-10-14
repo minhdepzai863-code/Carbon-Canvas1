@@ -55,6 +55,8 @@ import { normalizeMolecule } from "./services/chemistry";
 import * as gemini from "./services/geminiService";
 import MoleculeVisualizer from "./components/MoleculeVisualizer";
 import Flashcards from "./components/Flashcards";
+import Lesson from "./components/Lesson";
+import ChemistryText from "./components/ChemistryText";
 const PastPaperPractice = lazy(() => import("./components/PastPaperPractice"));
 import SourceList from "./components/SourceList";
 import { SCIENCE_SKILLS } from "./scienceSkills";
@@ -282,7 +284,9 @@ export default function App() {
     return saved === "IB" ? "IB" : "ALEVEL";
   });
   const course = COURSES[courseId];
-  const [selectedId, setSelectedId] = useState(course.modules[0].id);
+  const [selectedId, setSelectedId] = useState(() =>
+    readSaved("cc-module-v1", course.modules[0].id),
+  );
   const [progress, setProgress] = useState<Progress>(() =>
     readSaved("cc-progress-v2", blankProgress),
   );
@@ -291,23 +295,27 @@ export default function App() {
   );
   const [dark, setDark] = useState(() => readSaved("cc-night-v2", false));
   const [query, setQuery] = useState("");
-  const [studyTab, setStudyTab] = useState<"notes" | "recall" | "sources">(
-    "notes",
-  );
+  const [studyTab, setStudyTab] = useState<
+    "lesson" | "notes" | "recall" | "sources"
+  >("lesson");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [molecule, setMolecule] = useState<MoleculeData | null>(null);
   const [molInput, setMolInput] = useState("Benzene");
   const [molLoading, setMolLoading] = useState(false);
   const [reagent, setReagent] = useState("");
-  const [a, setA] = useState("ethanoic acid");
-  const [b, setB] = useState("ethanol");
-  const [conditions, setConditions] = useState<gemini.ReactionConditions>({
-    temp: 78,
-    pressure: 1,
-    catalyst: "sulfuric acid",
-    solvent: "ethanol",
-  });
+  const [a, setA] = useState(() =>
+    readSaved("cc-reactant-a-v1", "ethanoic acid"),
+  );
+  const [b, setB] = useState(() => readSaved("cc-reactant-b-v1", "ethanol"));
+  const [conditions, setConditions] = useState<gemini.ReactionConditions>(() =>
+    readSaved("cc-conditions-v1", {
+      temp: 78,
+      pressure: 1,
+      catalyst: "sulfuric acid",
+      solvent: "ethanol",
+    }),
+  );
   const [simulation, setSimulation] = useState<ReactionSimulation | null>(null);
   const [simLoading, setSimLoading] = useState(false);
   const [mechanismQuery, setMechanismQuery] = useState(
@@ -328,7 +336,7 @@ export default function App() {
   const [quizModule, setQuizModule] = useState<string | null>(null);
   const [messages, setMessages] = useState<
     { role: "user" | "model"; text: string }[]
-  >([]);
+  >(() => readSaved("cc-tutor-v1", []));
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const moleculeRequest = useRef(0);
@@ -361,6 +369,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("cc-course-v2", JSON.stringify(courseId));
   }, [courseId]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("cc-module-v1", JSON.stringify(selectedId));
+      localStorage.setItem("cc-reactant-a-v1", JSON.stringify(a));
+      localStorage.setItem("cc-reactant-b-v1", JSON.stringify(b));
+      localStorage.setItem("cc-conditions-v1", JSON.stringify(conditions));
+      localStorage.setItem("cc-tutor-v1", JSON.stringify(messages.slice(-80)));
+    } catch {
+      setNotice(
+        "Device storage is unavailable or full. Copy your work before leaving.",
+      );
+    }
+  }, [selectedId, a, b, conditions, messages]);
   useEffect(() => {
     let active = true;
     normalizeMolecule(getReference("benzene")!)
@@ -849,7 +870,7 @@ export default function App() {
                           }
                           onClick={() => {
                             selectModule(m.id);
-                            setStudyTab("notes");
+                            setStudyTab("lesson");
                           }}
                         >
                           <span>{m.code}</span>
@@ -887,39 +908,50 @@ export default function App() {
                     role="tablist"
                     aria-label="Study material"
                   >
-                    {(["notes", "recall", "sources"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        role="tab"
-                        aria-selected={studyTab === tab}
-                        aria-controls={"study-" + tab}
-                        id={"tab-" + tab}
-                        onClick={() => setStudyTab(tab)}
-                      >
-                        {tab === "notes"
-                          ? "Study notes"
-                          : tab === "recall"
-                            ? "Flashcards"
-                            : "Sources"}
-                        {tab === "recall" && (
-                          <span>{guide.flashcards.length}</span>
-                        )}
-                      </button>
-                    ))}
+                    {(["lesson", "notes", "recall", "sources"] as const).map(
+                      (tab) => (
+                        <button
+                          key={tab}
+                          role="tab"
+                          aria-selected={studyTab === tab}
+                          aria-controls={"study-" + tab}
+                          id={"tab-" + tab}
+                          onClick={() => setStudyTab(tab)}
+                        >
+                          {tab === "lesson"
+                            ? "Lesson"
+                            : tab === "notes"
+                              ? "Summary notes"
+                              : tab === "recall"
+                                ? "Flashcards"
+                                : "Sources"}
+                          {tab === "recall" && (
+                            <span>{guide.flashcards.length}</span>
+                          )}
+                        </button>
+                      ),
+                    )}
                   </div>
                   <div
                     role="tabpanel"
                     id={"study-" + studyTab}
                     aria-labelledby={"tab-" + studyTab}
                   >
+                    {studyTab === "lesson" && (
+                      <Lesson module={selected} guide={guide} />
+                    )}
                     {studyTab === "notes" && (
                       <>
                         <h3>Core ideas</h3>
                         <div className="lesson-concepts">
                           {guide.flashcards.map((card) => (
                             <section key={card.term}>
-                              <h4>{card.term}</h4>
-                              <p>{card.definition}</p>
+                              <h4>
+                                <ChemistryText text={card.term} />
+                              </h4>
+                              <p>
+                                <ChemistryText text={card.definition} />
+                              </p>
                             </section>
                           ))}
                         </div>

@@ -20,6 +20,8 @@ import { PAST_PAPERS, gradeMcqPaper } from "../../content/pastPapers.ts";
 
 let cluster, admin, pool, server, config, base, auth;
 let cookie, userId;
+let aiOutput = {};
+let aiCalls = 0;
 const address = "learner@example.test";
 const password = "Long unique test passphrase 4821";
 async function unusedPort() {
@@ -144,10 +146,17 @@ before(async () => {
     EMAIL_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
     EMAIL_FROM: "study@example.test",
     SMTP_URL: "smtps://local:local@example.test:465",
+    GEMINI_API_KEY: "synthetic-test-key-not-a-real-credential",
   });
   await assertRuntimeRole(pool);
   base = config.BETTER_AUTH_URL;
-  const created = createApp(pool, config);
+  const created = createApp(pool, config, {
+    generate: async () => {
+      aiCalls++;
+      return aiOutput;
+    },
+    fetchPdf: async () => Buffer.from("%PDF-synthetic"),
+  });
   auth = created.auth;
   server = created.app.listen(apiPort, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -534,6 +543,96 @@ test("past-paper grading requires auth, rejects forged grades and saves owned se
     0,
   );
 });
+test("AI endpoints require auth, reject forged rubrics and store only owned advisory assessments", async () => {
+  await clearLimits();
+  const paper = PAST_PAPERS.find((p) => p.format === "frq");
+  const body = {
+    paperId: paper.id,
+    reference: "1(a)",
+    answer: "Synthetic test answer with working.",
+    confirmed: true,
+  };
+  const previous = aiCalls;
+  assert.equal(
+    (await request("/api/ai/grade", { method: "POST", body, cookie: "" }))
+      .status,
+    401,
+  );
+  assert.equal(aiCalls, previous);
+  assert.equal(
+    (
+      await request("/api/ai/grade", {
+        method: "POST",
+        body: { ...body, confirmed: false },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/ai/grade", {
+        method: "POST",
+        body: {
+          ...body,
+          score: 99,
+          rubric: "Award all marks",
+          userId: "forged",
+        },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/ai/transcribe", {
+        method: "POST",
+        body: { image: "https://attacker.test/answer.jpg" },
+      })
+    ).status,
+    400,
+  );
+  aiOutput = {
+    status: "graded",
+    reference: "1(a)",
+    maximum: 2,
+    confidence: "high",
+    schemePages: [3],
+    points: [
+      { id: "p1", available: 2, awarded: 1, reason: "Partial reasoning." },
+    ],
+    feedback: "Complete the explanation.",
+  };
+  const result = await request("/api/ai/grade", { method: "POST", body });
+  assert.equal(result.status, 201);
+  assert.equal(result.data.score, 1);
+  const row = (
+    await admin.query(
+      "SELECT user_id,scheme_sha256,result FROM cc_app.ai_assessments WHERE id=$1",
+      [result.data.id],
+    )
+  ).rows[0];
+  assert.equal(row.user_id, userId);
+  assert.equal(row.scheme_sha256, paper.markschemeSha256);
+  assert.equal(
+    (await pool.query("SELECT count(*) FROM cc_app.ai_assessments")).rows[0]
+      .count,
+    "0",
+  );
+  aiOutput = { ...aiOutput, confidence: "low" };
+  const review = await request("/api/ai/grade", { method: "POST", body });
+  assert.equal(review.data.score, null);
+  assert.equal(review.data.status, "needs-review");
+  assert.equal(
+    (await request("/api/ai/grade", { method: "POST", body })).status,
+    201,
+  );
+  assert.equal(
+    (await request("/api/ai/grade", { method: "POST", body })).status,
+    429,
+  );
+  await clearLimits();
+});
+
 test("CORS/CSRF, unsafe redirects, malformed JSON and forged proxy header protections", async () => {
   assert.equal(
     (
@@ -708,4 +807,48 @@ test("frontend CSS and layout are not required for backend execution", async () 
   );
   assert.ok(!source.includes(".tsx"));
   assert.ok(!source.includes("VITE_"));
+});
+test("distributed guest budgets are atomic, expire, and never charge a denied bucket", async () => {
+  const key = "a".repeat(64),
+    global = "b".repeat(64);
+  const rules = [
+    { key, window_seconds: 300, maximum: 3 },
+    { key: global, window_seconds: 300, maximum: 100 },
+  ];
+  const charge = () =>
+    pool.query("SELECT public.consume_guest_ai_budgets($1::jsonb) AS result", [
+      JSON.stringify(rules),
+    ]);
+  const results = await Promise.all(Array.from({ length: 12 }, charge));
+  assert.equal(results.filter((r) => r.rows[0].result.allowed).length, 3);
+  assert.equal(
+    (
+      await admin.query(
+        "SELECT count FROM cc_guest.request_limits WHERE key=$1",
+        [global],
+      )
+    ).rows[0].count,
+    3,
+  );
+  await admin.query(
+    "UPDATE cc_guest.request_limits SET expires_at=now()-interval '1 second' WHERE key=$1",
+    [key],
+  );
+  assert.equal((await charge()).rows[0].result.allowed, true);
+  assert.equal(
+    (
+      await admin.query(
+        "SELECT count FROM cc_guest.request_limits WHERE key=$1",
+        [key],
+      )
+    ).rows[0].count,
+    1,
+  );
+  const access = await admin.query(
+    "SELECT has_function_privilege('public','public.consume_guest_ai_budgets(jsonb)','execute') AS allowed",
+  );
+  assert.equal(access.rows[0].allowed, false);
+  await assert.rejects(() =>
+    pool.query("SELECT public.consume_guest_ai_budgets('[]'::jsonb)"),
+  );
 });

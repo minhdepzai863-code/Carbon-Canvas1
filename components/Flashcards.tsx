@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, RotateCcw, Shuffle, Check } from "lucide-react";
 import type { Flashcard } from "../types";
+import ChemistryText from "./ChemistryText";
 
 export default function Flashcards({
   cards,
@@ -191,7 +192,7 @@ export default function Flashcards({
               {revealed ? "Explanation" : "Question " + (position + 1)}
             </span>
             <span className="recall-text">
-              {revealed ? card.definition : card.term}
+              <ChemistryText text={revealed ? card.definition : card.term} />
             </span>
             <span className="recall-action">
               {revealed ? "Tap to see the question" : "Reveal answer"}{" "}

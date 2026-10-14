@@ -1,4 +1,5 @@
 import index from "./pastPapers.json" with { type: "json" };
+import schemeHashes from "./markschemeHashes.json" with { type: "json" };
 
 export type PaperFormat = "mcq" | "frq";
 export interface PastPaper {
@@ -17,11 +18,15 @@ export interface PastPaper {
   questionCount?: number;
   answerKey?: string;
   answerKeySha256?: string;
+  markschemeSha256?: string;
 }
 const sourceBase =
   "https://pastpapers.papacambridge.com/directories/CAIE/CAIE-pastpapers/upload/";
 export const PAST_PAPERS: PastPaper[] = index.papers.map((p) => ({
   ...p,
+  markschemeSha256: (schemeHashes as Record<string, string>)[
+    `${p.id.replace("_qp_", "_ms_")}.pdf`
+  ],
   format: p.format as PaperFormat,
   filename: `${p.id}.pdf`,
   paperUrl: new URL(`${p.id}.pdf`, sourceBase).href,
