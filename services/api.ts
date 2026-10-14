@@ -14,7 +14,7 @@ export async function api<T>(
     throw new Error(
       data?.error ||
         (response.status === 401
-          ? "Sign in with a verified account to use AI grading."
+          ? "This AI request could not be authorized. Your local work is unchanged."
           : "The server could not complete this request. Your local work is unchanged."),
     );
   return data as T;

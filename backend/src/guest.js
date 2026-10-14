@@ -24,6 +24,7 @@ export function loadGuestConfig(env = process.env) {
       FRONTEND_ORIGIN: z.string().url().optional(),
       VERCEL: z.string().optional(),
       VERCEL_URL: z.string().optional(),
+      VERCEL_BRANCH_URL: z.string().optional(),
       VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
       GUEST_LIMITER_URL: z
         .literal(
@@ -44,7 +45,11 @@ export function loadGuestConfig(env = process.env) {
     );
   const origins = [
     config.FRONTEND_ORIGIN,
-    ...[config.VERCEL_URL, config.VERCEL_PROJECT_PRODUCTION_URL]
+    ...[
+      config.VERCEL_URL,
+      config.VERCEL_BRANCH_URL,
+      config.VERCEL_PROJECT_PRODUCTION_URL,
+    ]
       .filter(Boolean)
       .map((host) => `https://${host}`),
   ];
@@ -232,12 +237,10 @@ export function createGuestApp(config, { checkQuota, ...aiDependencies } = {}) {
     ...aiDependencies,
   });
   app.use((_req, res) =>
-    res
-      .status(404)
-      .json({
-        code: "NOT_FOUND",
-        error: "Account endpoints are disabled in guest testing mode",
-      }),
+    res.status(404).json({
+      code: "NOT_FOUND",
+      error: "Account endpoints are disabled in guest testing mode",
+    }),
   );
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError)
@@ -257,12 +260,10 @@ export function createGuestApp(config, { checkQuota, ...aiDependencies } = {}) {
       res.getHeader("X-Request-Id"),
       error.name,
     );
-    res
-      .status(503)
-      .json({
-        error:
-          "The AI service is temporarily unavailable. Your local work is unchanged.",
-      });
+    res.status(503).json({
+      error:
+        "The AI service is temporarily unavailable. Your local work is unchanged.",
+    });
   });
   return { app };
 }

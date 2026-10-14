@@ -39,10 +39,25 @@
   line-height: 1.4;
   margin-top: 1.8rem;
 }
-.lesson-kicker {
+.orbital-diagram {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+  max-width: 520px;
   font-family: "Source Sans 3", sans-serif;
-  color: var(--muted);
-  font-size: 0.85rem;
+}
+.orbital-box {
+  border: 1px solid var(--ink);
+  min-height: 60px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+.orbital-label {
+  display: block;
+  text-align: center;
+  font-size: 16px;
+  margin-top: 0.4rem;
 }
 .lesson-figure {
   margin: 1.6rem 0;
@@ -72,7 +87,6 @@
   line-height: 1.6;
 }
 .worked-example {
-  border-left: 3px solid var(--accent);
   padding: 1rem 1.5rem;
   background: var(--raised);
   margin-block: 2rem;
@@ -90,10 +104,7 @@
   padding-top: 1rem;
 }
 .chemical-notation {
-  display: inline-block;
-  max-width: 100%;
-  overflow-x: auto;
-  vertical-align: middle;
+  display: inline;
 }
 .chemical-notation .katex {
   font-size: 1.05em;
@@ -2159,7 +2170,7 @@ progress::-moz-progress-bar {
 .study-article {
   min-width: 0;
 }
-@media (min-width: 701px) and (max-width: 1200px) {
+@media (min-width: 961px) and (max-width: 1200px) {
   .practice-layout {
     grid-template-columns: minmax(185px, 0.65fr) minmax(0, 2fr);
     gap: 1.25rem;

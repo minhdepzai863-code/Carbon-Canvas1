@@ -11,37 +11,22 @@ function LessonFigure({
   if (kind === "orbitals")
     return (
       <figure className="lesson-figure">
-        <svg
-          viewBox="0 0 560 170"
+        <div
+          className="orbital-diagram"
           role="img"
           aria-label="Nitrogen electron configuration: two electrons in 1s, two in 2s, and one in each of three 2p orbitals."
         >
-          <text x="24" y="30">
-            Nitrogen · orbital occupancy
-          </text>
-          {[40, 160, 280, 345, 410].map((x, i) => (
-            <g key={x}>
-              <rect
-                x={x}
-                y="55"
-                width="55"
-                height="60"
-                fill="none"
-                stroke="currentColor"
-              />
-              <text x={x + 11} y="94" fontSize="28">
-                {i < 2 ? "↑↓" : "↑"}
-              </text>
-              <text x={x + 16} y="145">
-                {i === 0 ? "1s" : i === 1 ? "2s" : "2p"}
-              </text>
-            </g>
+          {["1s", "2s", "2p", "2p", "2p"].map((label, i) => (
+            <div key={i} aria-hidden="true">
+              <span className="orbital-box">{i < 2 ? "↑↓" : "↑"}</span>
+              <span className="orbital-label">{label}</span>
+            </div>
           ))}
-        </svg>
+        </div>
         <figcaption>
-          One box represents one orbital. Equal-energy p orbitals are occupied
-          singly before pairing. This is an occupancy diagram, not an image of
-          electron paths.
+          Nitrogen orbital occupancy. One box represents one orbital.
+          Equal-energy p orbitals are occupied singly before pairing. This is an
+          occupancy diagram, not an image of electron paths.
         </figcaption>
       </figure>
     );
@@ -188,9 +173,6 @@ export default function Lesson({
   const chapter = getLessonChapter(module, guide);
   return (
     <div className="lesson-reading">
-      <p className="lesson-kicker">
-        Learn the idea · original teaching example
-      </p>
       <h3>The bigger picture</h3>
       <p>
         <ChemistryText text={chapter.opening} />
@@ -201,9 +183,8 @@ export default function Lesson({
         <ChemistryText text={chapter.approach} />
       </p>
       <section className="worked-example">
-        <span className="tag">Worked example</span>
         <h3>
-          <ChemistryText text={chapter.example.problem} />
+          Worked example: <ChemistryText text={chapter.example.problem} />
         </h3>
         <ol>
           {chapter.example.steps.map((step, i) => (

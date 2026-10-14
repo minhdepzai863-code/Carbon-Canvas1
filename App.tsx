@@ -895,13 +895,13 @@ export default function App() {
                   </div>
                 </aside>
                 <article className="study-article">
+                  <h2>{selected.title}</h2>
                   <div className="study-meta">
                     <span className="tag">{selected.level}</span>
                     <span>
                       {selected.group} / {selected.code}
                     </span>
                   </div>
-                  <h2>{selected.title}</h2>
                   <p className="article-summary">{guide.summary}</p>
                   <div
                     className="article-tabs"

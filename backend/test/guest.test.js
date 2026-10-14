@@ -14,6 +14,20 @@ const config = loadGuestConfig({
   CC_DEV_MEMORY_QUOTA: "true",
 });
 test("guest cookies are authenticated and expire; production cannot use memory quotas", () => {
+  const hosted = loadGuestConfig({
+    ...config,
+    NODE_ENV: "production",
+    CC_DEV_MEMORY_QUOTA: "false",
+    GUEST_LIMITER_URL:
+      "https://nxgbmuaycudgyrxzbuks.supabase.co/functions/v1/guest-ai-limiter",
+    VERCEL_BRANCH_URL:
+      "carbon-canvas1-git-codex-re-ee7ba0-minhdepzai863-codes-projects.vercel.app",
+  });
+  assert.ok(
+    hosted.origins.includes(
+      "https://carbon-canvas1-git-codex-re-ee7ba0-minhdepzai863-codes-projects.vercel.app",
+    ),
+  );
   const now = Date.now();
   const c = deviceCookie(config, null, now);
   assert.equal(deviceCookie(config, c.value, now).id, c.id);
