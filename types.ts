@@ -1,12 +1,12 @@
-
 export enum AppView {
-  DASHBOARD = 'DASHBOARD',
-  MOLECULE_VIEWER = 'MOLECULE_VIEWER',
-  REACTION_TUTOR = 'REACTION_TUTOR',
-  QUIZ_ARENA = 'QUIZ_ARENA',
-  CHAT_TUTOR = 'CHAT_TUTOR',
-  ARCHIVE = 'ARCHIVE',
-  STUDY_HUB = 'STUDY_HUB'
+  DASHBOARD = "DASHBOARD",
+  MOLECULE_VIEWER = "MOLECULE_VIEWER",
+  REACTION_TUTOR = "REACTION_TUTOR",
+  REACTION_SIMULATOR = "REACTION_SIMULATOR",
+  QUIZ_ARENA = "QUIZ_ARENA",
+  CHAT_TUTOR = "CHAT_TUTOR",
+  ARCHIVE = "ARCHIVE",
+  STUDY_HUB = "STUDY_HUB",
 }
 
 export interface Atom {
@@ -14,13 +14,15 @@ export interface Atom {
   element: string;
   x?: number;
   y?: number;
+  formalCharge?: number;
+  implicitHydrogens?: number;
 }
 
 export interface Bond {
   source: string;
   target: string;
   order: number; // 1, 2, 3 for single, double, triple
-  stereo?: 'none' | 'wedge' | 'dash'; // Stereochemistry
+  stereo?: "none" | "wedge" | "dash"; // Stereochemistry
 }
 
 export interface ResonanceStructure {
@@ -33,6 +35,11 @@ export interface MoleculeData {
   description: string;
   atoms: Atom[];
   bonds: Bond[];
+  smiles?: string;
+  formula?: string;
+  sourceUrl?: string;
+  provenance?: "reference" | "user" | "ai";
+  geometry?: { shape: string; angle: string; note: string; sourceUrl: string };
   resonanceStructures?: ResonanceStructure[];
   symmetry?: {
     pointGroup: string;
@@ -48,8 +55,18 @@ export interface ArchiveItem {
 }
 
 export interface QuizQuestion {
+  bankId?: string;
+  source?: {
+    title: string;
+    url: string;
+    kind: "original" | "adapted-past-paper";
+    year?: number;
+    reference?: string;
+    license: string;
+    attribution?: string;
+  };
   id: number;
-  type: 'mcq' | 'fitb' | 'short_answer';
+  type: "mcq" | "fitb" | "short_answer";
   question: string;
   options?: string[]; // Only for MCQ
   correctAnswer: string; // Text answer for all types
@@ -85,11 +102,30 @@ export interface StudyGuide {
   keyPoints: string[];
   commonMistakes: string[];
   resources: VideoResource[];
+  flashcards: Flashcard[];
+}
+
+export interface Flashcard {
+  id?: string;
+  term: string;
+  definition: string;
+  hint?: string;
+}
+
+export interface ReactionSimulation {
+  equation: string;
+  reactionType: string;
+  confidence: "high" | "medium" | "low";
+  explanation: string;
+  safetyNote: string;
+  product: MoleculeData;
+  assessment?: "balanced" | "qualitative" | "no-reaction";
+  balanceNote?: string;
 }
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'model';
+  role: "user" | "model";
   text: string;
   timestamp: number;
 }
@@ -98,9 +134,13 @@ export interface Module {
   id: string;
   title: string;
   description: string;
-  status: 'locked' | 'active' | 'completed';
+  status: "locked" | "active" | "completed";
   score?: number;
   topic: string; // Matches quiz topic
+  code?: string;
+  level?: string;
+  group?: string;
+  lessonKey?: string;
 }
 
 export interface UserStats {
