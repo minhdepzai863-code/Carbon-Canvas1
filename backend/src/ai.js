@@ -200,6 +200,7 @@ export async function assessPaper(
             text: JSON.stringify({
               paper: paper.id,
               requestedSubpart: reference,
+              outputReferenceRule: "Copy requestedSubpart exactly into the output reference field. Do not add the paper code, session, year, Q prefix, spaces or other text. The server rejects a changed reference even when the chemistry is correct.",
               studentAnswer: answer,
             }),
           },

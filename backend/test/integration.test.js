@@ -14,6 +14,7 @@ import { assertRuntimeRole, withUser } from "../src/db.js";
 import { createLimiter } from "../src/rate-limit.js";
 import { decryptMessage, deliverOne } from "../src/mail.js";
 import { migrate } from "../scripts/migrate.js";
+import { assessPaper, validateGrade } from "../src/ai.js";
 import { COURSES, getStudyGuide } from "../../content/curriculum.ts";
 import { getQuestionBank } from "../../content/questionBank.ts";
 import { PAST_PAPERS, gradeMcqPaper } from "../../content/pastPapers.ts";
@@ -631,6 +632,24 @@ test("AI endpoints require auth, reject forged rubrics and store only owned advi
     429,
   );
   await clearLimits();
+});
+
+test("grading prompt requires the exact subpart while expanded references still fail closed", async () => {
+  const reference = "1(a)(i)";
+  const raw = {status:"graded",reference,maximum:1,confidence:"high",schemePages:[7],points:[{id:"p1",available:1,awarded:1,reason:"Correct particle count."}],feedback:"Correct."};
+  const result = await assessPaper({}, PAST_PAPERS.find(p=>p.id==="9701_s26_qp_22"), reference, "4 electrons", {
+    fetchPdf:async()=>Buffer.from("%PDF-synthetic"),
+    generate:async(_config,input)=>{
+      const sent=JSON.parse(input.messages[0].content.find(c=>c.type==="text").text);
+      assert.equal(sent.requestedSubpart,reference);
+      assert.match(sent.outputReferenceRule,/Copy requestedSubpart exactly/);
+      return raw;
+    },
+  });
+  assert.equal(result.score,1);
+  const mismatched=validateGrade({...raw,reference:"9701/22/M/J/26 Q1(a)(i)"},reference);
+  assert.equal(mismatched.status,"needs-review");
+  assert.equal(mismatched.score,null);
 });
 
 test("CORS/CSRF, unsafe redirects, malformed JSON and forged proxy header protections", async () => {
