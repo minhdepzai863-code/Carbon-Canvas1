@@ -155,6 +155,9 @@ before(async () => {
     generate: async (_config, { schema }) => {
       aiCalls++;
       // Exercise the same callback the real SDK invokes, not just final AJV.
+      if (typeof schema?.safeParse === "function") {
+        return schema.parse(aiOutput);
+      }
       if (typeof schema?.validate === "function") {
         const checked = await schema.validate(aiOutput);
         if (!checked.success)
