@@ -1067,6 +1067,8 @@ export default function App() {
                     value={molInput}
                     onChange={(e) => setMolInput(e.target.value)}
                     placeholder="Benzene, water, or smiles:CCO"
+                    maxLength={1000}
+                    aria-describedby="molecule-input-hint"
                     required
                   />
                   <button className="button" disabled={molLoading}>
@@ -1078,9 +1080,10 @@ export default function App() {
                     Inspect structure
                   </button>
                 </div>
-                <p className="fine-print">
-                  Reference examples open instantly. Use “smiles:” for a
-                  supplied structure; other names use the AI service.
+                <p className="fine-print" id="molecule-input-hint">
+                  Try a molecule name such as ethanol, or enter smiles:CCO for
+                  its structure. Reference examples and supplied SMILES work
+                  without AI; other names use the AI service.
                 </p>
               </form>
               <div className="example-row">

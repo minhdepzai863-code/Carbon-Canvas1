@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { fetchCheckedPdf, validateGrade } from "../src/ai.js";
+import {
+  fetchCheckedPdf,
+  validateGrade,
+  modelFailure,
+  runModel,
+} from "../src/ai.js";
+import { APICallError, NoObjectGeneratedError, jsonSchema } from "ai";
+import { parseMoleculeInput } from "../../services/moleculeInput.ts";
 import { COURSES, getStudyGuide } from "../../content/curriculum.ts";
 import { getLessonChapter } from "../../content/lessonChapters.ts";
 import { PAST_PAPERS } from "../../content/pastPapers.ts";
@@ -23,6 +30,132 @@ const grade = {
   ],
   feedback: "Check units.",
 };
+test("molecule input distinguishes notation instructions from an actual structure", () => {
+  for (const input of ["", "smiles", "SMILES:", "  smiles :  "])
+    assert.throws(() => parseMoleculeInput(input));
+  assert.deepEqual(parseMoleculeInput(" SMILES : CCO "), {
+    kind: "smiles",
+    value: "CCO",
+  });
+  assert.deepEqual(parseMoleculeInput(" ethanol "), {
+    kind: "name",
+    value: "ethanol",
+  });
+});
+test("AI failures are classified without exposing provider bodies, prompts or keys", async () => {
+  for (const [status, code] of [
+    [429, "PROVIDER_RATE_LIMITED"],
+    [400, "AI_REQUEST_REJECTED"],
+    [401, "AI_CREDENTIALS_REJECTED"],
+    [403, "AI_CREDENTIALS_REJECTED"],
+    [404, "AI_MODEL_UNAVAILABLE"],
+    [503, "AI_PROVIDER_UNAVAILABLE"],
+  ]) {
+    const raw = new APICallError({
+      message: "SECRET_PROMPT_AND_KEY",
+      url: "https://example.invalid/?key=SECRET",
+      requestBodyValues: { prompt: "SECRET" },
+      statusCode: status,
+      responseBody: "SECRET",
+    });
+    const result = modelFailure(raw);
+    assert.equal(result.code, code);
+    assert.ok(!result.message.includes("SECRET"));
+  }
+  const raw = new NoObjectGeneratedError({
+    message: "SECRET",
+    text: "SECRET",
+    response: { id: "synthetic", timestamp: new Date(), modelId: "test" },
+    usage: {},
+    finishReason: "length",
+  });
+  assert.equal(modelFailure(raw).code, "AI_OUTPUT_INCOMPLETE");
+  assert.equal(
+    modelFailure(Object.assign(new Error("SECRET"), { name: "TimeoutError" }))
+      .code,
+    "AI_TIMEOUT",
+  );
+  await assert.rejects(
+    runModel(
+      { GEMINI_API_KEY: "synthetic-key-not-real" },
+      {
+        schema: jsonSchema({
+          type: "object",
+          properties: { value: { type: "string" } },
+          required: ["value"],
+        }),
+        prompt: "synthetic",
+      },
+      {
+        generate: async () => ({
+          get output() {
+            throw raw;
+          },
+        }),
+      },
+    ),
+    { code: "AI_OUTPUT_INCOMPLETE" },
+  );
+});
+test("one transient provider retry is bounded and quota errors are never retried", async () => {
+  const config = { GEMINI_API_KEY: "synthetic-key-not-real" };
+  const apiError = (statusCode) =>
+    new APICallError({
+      message: "synthetic",
+      url: "https://example.invalid",
+      requestBodyValues: {},
+      statusCode,
+    });
+  let calls = 0;
+  let sharedSignal;
+  const result = await runModel(
+    config,
+    { prompt: "synthetic" },
+    {
+      wait: async () => {},
+      generate: async (opts) => {
+        calls++;
+        assert.equal(opts.maxRetries, 0);
+        if (calls === 1) {
+          sharedSignal = opts.abortSignal;
+          throw apiError(503);
+        }
+        assert.equal(opts.abortSignal, sharedSignal);
+        return {
+          text: "synthetic answer",
+          get output() {
+            throw new Error("Text calls must not read output");
+          },
+        };
+      },
+    },
+  );
+  assert.equal(result, "synthetic answer");
+  assert.equal(calls, 2);
+  for (const [status, expected, code] of [
+    [429, 1, "PROVIDER_RATE_LIMITED"],
+    [503, 2, "AI_PROVIDER_UNAVAILABLE"],
+    [400, 1, "AI_REQUEST_REJECTED"],
+  ]) {
+    calls = 0;
+    await assert.rejects(
+      runModel(
+        config,
+        { prompt: "synthetic" },
+        {
+          wait: async () => {},
+          generate: async () => {
+            calls++;
+            throw apiError(status);
+          },
+        },
+      ),
+      { code },
+    );
+    assert.equal(calls, expected);
+  }
+});
+
 test("advisory grade totals are computed by server and ambiguous output receives no score", () => {
   assert.equal(validateGrade(grade, "1(a)").score, 1);
   for (const invalid of [

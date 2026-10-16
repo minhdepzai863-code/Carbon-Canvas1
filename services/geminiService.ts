@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { parseMoleculeInput } from "./moleculeInput";
 import type {
   MoleculeData,
   QuizData,
@@ -176,7 +177,11 @@ const simulationSchema = {
   ],
 };
 
-const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
+const generateJson = async <T>(
+  prompt: string,
+  schema: object,
+  moleculeInput?: string,
+): Promise<T> => {
   const kind =
     schema === moleculeSchema
       ? "molecule"
@@ -187,8 +192,13 @@ const generateJson = async <T>(prompt: string, schema: object): Promise<T> => {
           : schema === studyGuideSchema
             ? "study"
             : "simulation";
-  return (await api<{ result: T }>("/api/ai/generate", { kind, prompt }))
-    .result;
+  return (
+    await api<{ result: T }>("/api/ai/generate", {
+      kind,
+      prompt,
+      ...(moleculeInput === undefined ? {} : { moleculeInput }),
+    })
+  ).result;
 };
 
 const cleanMolecule = (data: MoleculeData) => ({
@@ -213,21 +223,24 @@ const cleanMolecule = (data: MoleculeData) => ({
 });
 
 export const generateMoleculeData = async (moleculeName: string) => {
-  const reference = getReference(moleculeName);
+  const input = parseMoleculeInput(moleculeName);
+  const reference =
+    input.kind === "name" ? getReference(input.value) : undefined;
   if (reference) return normalizeMolecule(reference);
-  if (/^smiles:/i.test(moleculeName))
+  if (input.kind === "smiles")
     return normalizeMolecule({
       name: "Custom structure",
       description:
         "Structure supplied as SMILES. Identity has not been checked against a reference database.",
-      smiles: moleculeName.replace(/^smiles:/i, "").trim(),
+      smiles: input.value,
       atoms: [],
       bonds: [],
       provenance: "user",
     });
   const result = await generateJson<MoleculeData>(
-    `Generate a chemically plausible 2D graph for ${JSON.stringify(moleculeName)}. Include explicit heavy atoms, bonds, a concise description, resonance contributors when relevant, and symmetry information.`,
+    `Generate a chemically plausible 2D graph for ${JSON.stringify(input.value)}. Include explicit heavy atoms, bonds, a concise description, resonance contributors when relevant, and symmetry information.`,
     moleculeSchema,
+    input.value,
   );
   return normalizeMolecule({
     ...result,

@@ -54,6 +54,10 @@ PubChem’s rate-limited Science Skills wrapper was attempted during this update
 
 Run the reproducible chemistry/content regression suite with `npm run verify:chemistry`, then the production build with `npm run build`.
 
+Molecule input accepts a name (for example `ethanol`) or prefixed SMILES (`smiles:CCO`). The word `smiles` alone is notation guidance, not a molecule lookup. Empty/prefix-only inputs are rejected locally without spending AI quota. Supplied structures are parsed and validated by RDKit without Gemini; errors leave the current structure intact.
+
+The Gemini adapter distinguishes malformed output, provider outages, credentials/model errors, timeouts and quota limits. It retries an upstream 500/502/503/504 once with short jittered backoff inside the same 90-second request deadline; it never automatically retries 429 quota errors, invalid output or client errors. No model fallback or quota increase is performed. A transient Google 503 followed by success was observed for the SN2 mechanism example; this does not establish a permanent provider availability guarantee.
+
 ## Sources and acknowledgements
 
 - [Cambridge official chemistry 9701 syllabus](https://www.cambridgeinternational.org/Images/664563-2025-2027-syllabus.pdf)

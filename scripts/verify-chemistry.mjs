@@ -32,6 +32,46 @@ await build({
 });
 const chemistry = await import(pathToFileURL(output));
 let checks = 0;
+// These paths must not depend on Gemini or spend its quota.
+const originalFetch = globalThis.fetch;
+let networkCalls = 0;
+globalThis.fetch = async () => {
+  networkCalls++;
+  throw new Error("Unexpected network request in local molecule path");
+};
+try {
+  for (const invalid of [
+    "",
+    "  ",
+    "smiles",
+    "SMILES",
+    "smiles:",
+    " SMILES : ",
+    "x".repeat(1001),
+  ]) {
+    await assert.rejects(
+      chemistry.generateMoleculeData(invalid),
+      /Enter|SMILES|1,000/,
+    );
+    checks++;
+  }
+  for (const input of ["smiles:CCO", " SMILES : CCO "]) {
+    const mol = await chemistry.generateMoleculeData(input);
+    assert.equal(mol.formula, "C2H6O");
+    assert.equal(mol.provenance, "user");
+    checks++;
+  }
+  await assert.rejects(
+    chemistry.generateMoleculeData("smiles:invalid"),
+    /valence|aromaticity/,
+  );
+  const reference = await chemistry.generateMoleculeData("  Benzene  ");
+  assert.equal(reference.formula, "C6H6");
+  assert.equal(networkCalls, 0);
+  checks += 3;
+} finally {
+  globalThis.fetch = originalFetch;
+}
 for (const item of chemistry.REFERENCE_MOLECULES) {
   const normalized = await chemistry.normalizeMolecule({
     ...item,
