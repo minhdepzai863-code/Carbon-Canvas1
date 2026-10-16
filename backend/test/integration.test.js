@@ -14,7 +14,7 @@ import { assertRuntimeRole, withUser } from "../src/db.js";
 import { createLimiter } from "../src/rate-limit.js";
 import { decryptMessage, deliverOne } from "../src/mail.js";
 import { migrate } from "../scripts/migrate.js";
-import { assessPaper, validateGrade } from "../src/ai.js";
+import { assessPaper, validateGrade, AIError } from "../src/ai.js";
 import { COURSES, getStudyGuide } from "../../content/curriculum.ts";
 import { getQuestionBank } from "../../content/questionBank.ts";
 import { PAST_PAPERS, gradeMcqPaper } from "../../content/pastPapers.ts";
@@ -152,8 +152,19 @@ before(async () => {
   await assertRuntimeRole(pool);
   base = config.BETTER_AUTH_URL;
   const created = createApp(pool, config, {
-    generate: async () => {
+    generate: async (_config, { schema }) => {
       aiCalls++;
+      // Exercise the same callback the real SDK invokes, not just final AJV.
+      if (typeof schema?.validate === "function") {
+        const checked = await schema.validate(aiOutput);
+        if (!checked.success)
+          throw new AIError(
+            502,
+            "INVALID_AI_OUTPUT",
+            "Synthetic output rejected",
+          );
+        return checked.value;
+      }
       return aiOutput;
     },
     fetchPdf: async () => Buffer.from("%PDF-synthetic"),
@@ -630,6 +641,79 @@ test("AI endpoints require auth, reject forged rubrics and store only owned advi
   assert.equal(
     (await request("/api/ai/grade", { method: "POST", body })).status,
     429,
+  );
+  await clearLimits();
+});
+
+test("all five generation kinds validate the output against the request kind through HTTP", async () => {
+  await clearLimits();
+  const molecule = {
+    name: "Methanol",
+    description: "Synthetic fixture",
+    smiles: "CO",
+    atoms: [
+      { id: "a0", element: "C" },
+      { id: "a1", element: "O" },
+    ],
+    bonds: [{ source: "a0", target: "a1", order: 1 }],
+  };
+  const fixtures = {
+    molecule,
+    quiz: {
+      topic: "Synthetic",
+      questions: Array.from({ length: 5 }, (_, i) => ({
+        id: i + 1,
+        type: "short_answer",
+        question: "Synthetic",
+        correctAnswer: "Synthetic",
+        explanation: "Synthetic",
+      })),
+    },
+    reaction: {
+      name: "Synthetic SN2",
+      steps: [{ step: 1, description: "Synthetic", keyConcept: "Synthetic" }],
+      references: [],
+    },
+    study: {
+      topic: "Synthetic",
+      summary: "Synthetic",
+      keyPoints: [],
+      commonMistakes: [],
+      resources: [],
+      flashcards: Array.from({ length: 6 }, () => ({
+        term: "Synthetic",
+        definition: "Synthetic",
+        hint: "Synthetic",
+      })),
+    },
+    simulation: {
+      equation: "Synthetic",
+      reactionType: "Synthetic",
+      confidence: "low",
+      explanation: "Synthetic",
+      safetyNote: "Synthetic",
+      product: molecule,
+    },
+  };
+  for (const [kind, fixture] of Object.entries(fixtures)) {
+    assert.equal(fixture.kind, undefined);
+    aiOutput = fixture;
+    const result = await request("/api/ai/generate", {
+      method: "POST",
+      body: { kind, prompt: "Synthetic" },
+    });
+    assert.equal(result.status, 200, kind);
+    assert.deepEqual(result.data.result, fixture);
+  }
+  aiOutput = { kind: "molecule" };
+  assert.equal(
+    (
+      await request("/api/ai/generate", {
+        method: "POST",
+        body: { kind: "reaction", prompt: "Synthetic" },
+      })
+    ).status,
+    502,
   );
   await clearLimits();
 });

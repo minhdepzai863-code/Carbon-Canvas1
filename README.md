@@ -56,7 +56,7 @@ Run the reproducible chemistry/content regression suite with `npm run verify:che
 
 Molecule input accepts a name (for example `ethanol`) or prefixed SMILES (`smiles:CCO`). The word `smiles` alone is notation guidance, not a molecule lookup. Empty/prefix-only inputs are rejected locally without spending AI quota. Supplied structures are parsed and validated by RDKit without Gemini; errors leave the current structure intact.
 
-The Gemini adapter distinguishes malformed output, provider outages, credentials/model errors, timeouts and quota limits. It retries an upstream 500/502/503/504 once with short jittered backoff inside the same 90-second request deadline; it never automatically retries 429 quota errors, invalid output or client errors. No model fallback or quota increase is performed. A transient Google 503 followed by success was observed for the SN2 mechanism example; this does not establish a permanent provider availability guarantee.
+The Gemini adapter validates generated output using the original request kind, not a `kind` field on the model's response. HTTP regression fixtures exercise the SDK validation callback for all five generation kinds. It distinguishes malformed output, provider outages, credentials/model errors, timeouts and quota limits. It retries an upstream 500/502/503/504 once with short jittered backoff inside the same 90-second request deadline; it never automatically retries 429 quota errors, invalid output or client errors. No model fallback or quota increase is performed. A transient Google 503 followed by success was observed for the SN2 mechanism example; this does not establish a permanent provider availability guarantee.
 
 ## Sources and acknowledgements
 

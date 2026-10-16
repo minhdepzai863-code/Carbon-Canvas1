@@ -371,9 +371,9 @@ export function installAIRoutes(
       value.prompt = `Generate a chemically plausible 2D graph for ${JSON.stringify(input.value)}. Include explicit heavy atoms, bonds, a concise description, resonance contributors when relevant, and symmetry information.`;
     }
     const schema = jsonSchema(AI_SCHEMAS[value.kind], {
-      validate: async (value) =>
-        validators[value.kind](value)
-          ? { success: true, value }
+      validate: async (output) =>
+        validators[value.kind](output)
+          ? { success: true, value: output }
           : { success: false, error: new Error("Invalid chemistry output") },
     });
     const output = await generate(config, { schema, prompt: value.prompt });
