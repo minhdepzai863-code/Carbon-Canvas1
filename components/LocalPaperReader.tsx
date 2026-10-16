@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import { acceptsInkPointer, type InkTool } from "../services/inkInput";
 import {
   cachePaper,
   cachedPaper,
@@ -15,12 +16,14 @@ import { exportAnnotatedPaper, renderInkImage } from "../services/paperExport";
 export default function LocalPaperReader({
   filename,
   sha256,
+  documentUrl,
   firstPage = 2,
   onLoaded,
   onInk,
 }: {
   filename: string;
   sha256?: string;
+  documentUrl: string;
   firstPage?: number;
   onLoaded: () => void;
   onInk?: (image: string, page: number) => void;
@@ -35,12 +38,17 @@ export default function LocalPaperReader({
   const canvas = useRef<HTMLCanvasElement>(null);
   const latest = useRef(0);
   const [ink, setInk] = useState<PaperInk>(() => readInk(filename));
-  const [tool, setTool] = useState<"pan" | "pen" | "erase">("pan");
+  const [tool, setTool] = useState<InkTool>("pen");
+  const [retry, setRetry] = useState(0);
+  const drawingSurface = useRef<HTMLDivElement>(null);
+  const lastPenTime = useRef(-Infinity);
   const [draft, setDraft] = useState<InkStroke | null>(null);
   const [redo, setRedo] = useState<InkStroke[]>([]);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState("");
-  const active = useRef<{ id: number; stroke: InkStroke } | null>(null);
+  const active = useRef<{ id: number; type: string; stroke: InkStroke } | null>(
+    null,
+  );
   const strokes = ink[String(page)] || [];
   useEffect(() => {
     try {
@@ -53,15 +61,36 @@ export default function LocalPaperReader({
   }, [ink, filename]);
   useEffect(() => {
     let cancelled = false;
+    const abort = new AbortController();
     const request = ++latest.current;
+    setLoading(true);
+    setError("");
     void cachedPaper(filename)
+      .catch(() => null)
       .then(async (data) => {
+        const retained = !!data;
+        if (!data) {
+          const response = await fetch(documentUrl, {
+            credentials: "same-origin",
+            signal: abort.signal,
+          });
+          if (!response.ok) {
+            const failure = await response.json().catch(() => null);
+            throw new Error(
+              failure?.error ||
+                "This paper could not be opened. Retry, or download the original and select it below.",
+            );
+          }
+          if (Number(response.headers.get("Content-Length") || 0) > 20000000)
+            throw new Error("This PDF exceeds the safe file size.");
+          data = new Uint8Array(await response.arrayBuffer());
+        }
         if (
           !data ||
           data.length > 20000000 ||
           String.fromCharCode(...data.slice(0, 5)) !== "%PDF-"
         )
-          return;
+          throw new Error("This file could not be read as a checked PDF.");
         if (sha256) {
           const digest = await crypto.subtle.digest(
             "SHA-256",
@@ -72,18 +101,56 @@ export default function LocalPaperReader({
               .map((b) => b.toString(16).padStart(2, "0"))
               .join("") !== sha256
           )
-            return;
+            throw new Error(
+              "This source differs from the checked paper. Use the original source link; no saved work was changed.",
+            );
         }
         if (!cancelled && request === latest.current) {
           setBytes(data);
-          setNotice("PDF restored from this device.");
+          setNotice(
+            retained
+              ? "PDF restored from this device. Ink saves automatically."
+              : "Paper opened. Ink and answers save on this device.",
+          );
+          if (!retained)
+            void cachePaper(filename, data).catch(() => {
+              if (!cancelled)
+                setNotice(
+                  "Paper opened, but this browser could not retain the PDF. Ink and answers save separately.",
+                );
+            });
         }
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (!cancelled) {
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Could not open the paper. Use the original source link.",
+          );
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
+      abort.abort();
     };
-  }, [filename, sha256]);
+  }, [filename, sha256, documentUrl, retry]);
+  useEffect(() => {
+    const surface = drawingSurface.current;
+    if (!surface || tool === "pan") return;
+    const preventScroll = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    // React's delegated touch handlers may be passive. Safari needs a native
+    // non-passive listener on the HTML drawing surface, not just SVG styling.
+    surface.addEventListener("touchstart", preventScroll, { passive: false });
+    surface.addEventListener("touchmove", preventScroll, { passive: false });
+    return () => {
+      surface.removeEventListener("touchstart", preventScroll);
+      surface.removeEventListener("touchmove", preventScroll);
+    };
+  }, [tool, pdf]);
   useEffect(() => {
     const cancel = () => {
       active.current = null;
@@ -98,46 +165,52 @@ export default function LocalPaperReader({
     setInk((value) => ({ ...value, [page]: next }));
     setRedo([]);
   };
-  const point = (e: PointerEvent<SVGSVGElement>) => {
+  const point = (e: PointerEvent<HTMLDivElement>, sample = e.nativeEvent) => {
     const box = e.currentTarget.getBoundingClientRect();
     return {
-      x: +Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)).toFixed(
-        5,
-      ),
-      y: +Math.max(0, Math.min(1, (e.clientY - box.top) / box.height)).toFixed(
-        5,
-      ),
+      x: +Math.max(
+        0,
+        Math.min(1, (sample.clientX - box.left) / box.width),
+      ).toFixed(5),
+      y: +Math.max(
+        0,
+        Math.min(1, (sample.clientY - box.top) / box.height),
+      ).toFixed(5),
     };
   };
-  const start = (e: PointerEvent<SVGSVGElement>) => {
-    if (
-      tool === "pan" ||
-      !e.isPrimary ||
-      active.current ||
-      (e.pointerType === "mouse" && e.button !== 0)
-    )
+  const start = (e: PointerEvent<HTMLDivElement>) => {
+    const now = performance.now();
+    if (!acceptsInkPointer(tool, e, active.current, lastPenTime.current, now))
       return;
+    if (e.pointerType === "pen") lastPenTime.current = now;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     active.current = {
       id: e.pointerId,
+      type: e.pointerType,
       stroke: { points: [point(e)], color: "#173d42", width: 0.0024 },
     };
     setDraft(active.current.stroke);
   };
-  const move = (e: PointerEvent<SVGSVGElement>) => {
+  const move = (e: PointerEvent<HTMLDivElement>) => {
     if (active.current?.id !== e.pointerId) return;
     e.preventDefault();
     if (active.current.stroke.points.length >= 3000) return;
-    active.current.stroke.points.push(point(e));
+    if (e.pointerType === "pen") lastPenTime.current = performance.now();
+    const samples = e.nativeEvent.getCoalescedEvents?.() || [];
+    for (const sample of samples.length ? samples : [e.nativeEvent]) {
+      if (active.current.stroke.points.length >= 3000) break;
+      active.current.stroke.points.push(point(e, sample));
+    }
     setDraft({
       ...active.current.stroke,
       points: [...active.current.stroke.points],
     });
   };
-  const finish = (e: PointerEvent<SVGSVGElement>) => {
+  const finish = (e: PointerEvent<HTMLDivElement>) => {
     if (active.current?.id !== e.pointerId) return;
     const stroke = active.current.stroke;
+    if (e.pointerType === "pen") lastPenTime.current = performance.now();
     active.current = null;
     setDraft(null);
     if (e.currentTarget.hasPointerCapture(e.pointerId))
@@ -175,9 +248,11 @@ export default function LocalPaperReader({
   useEffect(() => {
     if (!bytes) return;
     let cancelled = false;
-    let task: ReturnType<typeof import("pdfjs-dist").getDocument> | undefined;
+    let task:
+      | ReturnType<typeof import("pdfjs-dist/legacy/build/pdf.mjs").getDocument>
+      | undefined;
     setLoading(true);
-    void import("pdfjs-dist")
+    void import("pdfjs-dist/legacy/build/pdf.mjs")
       .then(async (lib) => {
         if (cancelled) return;
         lib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -245,11 +320,9 @@ export default function LocalPaperReader({
   }, [pdf, page]);
   return (
     <div className="local-paper-reader">
-      <details className="paper-file-options" open={!bytes}>
+      <details className="paper-file-options" open={!bytes && !loading}>
         <summary>
-          {bytes
-            ? "Local document options"
-            : "Open the checked PDF on this device"}
+          {bytes ? "Local document options" : "Use a downloaded PDF instead"}
         </summary>
         <label>
           {bytes ? "Replace local PDF" : "Load this paper to read and annotate"}
@@ -343,6 +416,14 @@ export default function LocalPaperReader({
       {error && (
         <p role="alert" className="notice error">
           {error}
+          {!bytes && (
+            <button
+              className="button secondary"
+              onClick={() => setRetry((v) => v + 1)}
+            >
+              Retry opening paper
+            </button>
+          )}
         </p>
       )}
       {pdf && (
@@ -487,11 +568,13 @@ export default function LocalPaperReader({
             )}
           </div>
           <p className="fine-print">
-            Pan scrolls with a finger; Pen draws with a stylus, mouse or single
-            touch. Eraser removes strokes. Use Pan for zooming and scrolling on
-            iPad.
+            {tool === "pan"
+              ? "Pan mode: scroll or pinch to zoom. Select Pen before writing."
+              : "Writing mode: Apple Pencil, mouse or one finger draws without scrolling. Select Pan to move around the page."}
           </p>
-          <div className="paper-canvas-viewport">
+          <div
+            className={`paper-canvas-viewport ${tool === "pan" ? "is-panning" : "is-writing"}`}
+          >
             <div className="annotated-page" style={{ width: zoom + "%" }}>
               <canvas
                 ref={canvas}
@@ -499,25 +582,36 @@ export default function LocalPaperReader({
                 role="img"
                 aria-label={`${filename}, page ${page}. Question diagrams and equations.`}
               />
-              <svg
-                className={`paper-ink tool-${tool}`}
-                viewBox="0 0 1000 1000"
-                preserveAspectRatio="none"
+              <div
+                ref={drawingSurface}
+                className={`paper-drawing-surface tool-${tool}`}
+                style={{ touchAction: tool === "pan" ? "auto" : "none" }}
+                role="img"
                 aria-label="Annotation drawing surface"
                 onPointerDown={start}
                 onPointerMove={move}
                 onPointerUp={finish}
-                onPointerCancel={() => {
+                onPointerCancel={(e) => {
+                  if (active.current?.id !== e.pointerId) return;
                   active.current = null;
                   setDraft(null);
                 }}
-                onLostPointerCapture={() => {
+                onLostPointerCapture={(e) => {
+                  if (active.current?.id !== e.pointerId) return;
                   active.current = null;
                   setDraft(null);
                 }}
               >
-                {[...strokes, ...(draft && tool === "pen" ? [draft] : [])].map(
-                  (s, i) =>
+                <svg
+                  className="paper-ink"
+                  viewBox="0 0 1000 1000"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  {[
+                    ...strokes,
+                    ...(draft && tool === "pen" ? [draft] : []),
+                  ].map((s, i) =>
                     s.points.length === 1 ? (
                       <circle
                         key={i}
@@ -539,8 +633,9 @@ export default function LocalPaperReader({
                         strokeLinejoin="round"
                       />
                     ),
-                )}
-              </svg>
+                  )}
+                </svg>
+              </div>
             </div>
           </div>
           <details>

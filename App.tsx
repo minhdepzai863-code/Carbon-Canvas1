@@ -617,7 +617,9 @@ export default function App() {
     </div>
   );
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell${view === AppView.QUIZ_ARENA ? " practice-workspace" : ""}`}
+    >
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>

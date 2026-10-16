@@ -36,7 +36,7 @@ export async function runModel(
   let generated;
   try {
     generated = await generateText({
-      model: provider(config.GEMINI_MODEL || "gemini-3.8-flash"),
+      model: provider(config.GEMINI_MODEL || "gemini-3.6-flash"),
       system,
       ...(messages ? { messages } : { prompt }),
       ...(schema ? { output: Output.object({ schema }) } : {}),

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-13T22:23:06.363Z",
+  "generatedAt": "2026-10-14T01:14:51.000Z",
   "title": "Design System: CarbonCanvas",
   "extensions": {
     "colorMeta": {
@@ -48,6 +48,8 @@
       "headline": { "displayName": "Section Heading", "purpose": "General section hierarchy." },
       "title": { "displayName": "Subsection Title", "purpose": "Concepts, facts, and smaller headings." },
       "body": { "displayName": "Explanatory Body", "purpose": "Readable chemistry explanations and summaries." },
+      "lesson-reading": { "displayName": "Lesson Reading", "purpose": "Long-form STIX lesson prose and worked examples, bounded to 75ch; paragraphs retain the global body line height." },
+      "lesson-reading-mobile": { "displayName": "Compact Lesson Reading", "purpose": "Lesson reading at or below 700px; headings, figure labels, and captions retain the sans-serif hierarchy." },
       "label": { "displayName": "Field Label", "purpose": "Visible labels for fields and controls." },
       "button": { "displayName": "Action Label", "purpose": "Semibold sentence-case button labels." },
       "tag": { "displayName": "Provenance Tag", "purpose": "Compact written provenance and context labels." },
@@ -68,7 +70,8 @@
       { "name": "large-desktop-min", "value": "1400px" },
       { "name": "compact-desktop-max", "value": "1180px" },
       { "name": "stacked-tools-max", "value": "960px" },
-      { "name": "mobile-drawer-max", "value": "760px" }
+      { "name": "mobile-drawer-max", "value": "760px" },
+      { "name": "compact-lesson-max", "value": "700px" }
     ]
   },
   "components": [
@@ -137,6 +140,14 @@
       "css": ".ds-reading-panel{background:var(--paper,#fff);color:var(--ink,#233738);padding:30px 34px;border-radius:12px;box-shadow:var(--shadow,0 10px 28px -12px rgb(20 49 51 / .19));min-width:0;font-family:'Source Sans 3','Segoe UI',sans-serif}.ds-reading-panel>h2{margin:0 0 13px;font-size:31px;font-weight:600;line-height:1.25;letter-spacing:-.018em;text-wrap:balance}.ds-reading-summary{margin:0;color:var(--muted,#586b6c);max-width:68ch;font-size:16px;line-height:1.6}@media(max-width:1180px){.ds-reading-panel{padding:24px}}@media(max-width:760px){.ds-reading-panel{padding:24px 22px}.ds-reading-panel>h2{font-size:27px}}"
     },
     {
+      "name": "Lesson Reading",
+      "kind": "custom",
+      "refersTo": "lesson-reading",
+      "description": "STIX lesson text with sans-serif heading, labeled orbital occupancy, and a schematic caption; the specimen retains the paragraph and responsive styles from the build.",
+      "html": "<div class=\"ds-lesson-reading\"><h3>The bigger picture</h3><p>An element is identified by its nucleus, but its chemistry is largely controlled by electrons. Separate those two jobs: changing neutrons produces an isotope; changing electrons produces an ion. Atomic mass is a weighted average over a sample, not a particle count in one atom.</p><figure class=\"ds-lesson-figure\"><div class=\"ds-orbital-diagram\" role=\"img\" aria-label=\"Nitrogen electron configuration: two electrons in 1s, two in 2s, and one in each of three 2p orbitals.\"><div aria-hidden=\"true\"><span class=\"ds-orbital-box\">↑↓</span><span class=\"ds-orbital-label\">1s</span></div><div aria-hidden=\"true\"><span class=\"ds-orbital-box\">↑↓</span><span class=\"ds-orbital-label\">2s</span></div><div aria-hidden=\"true\"><span class=\"ds-orbital-box\">↑</span><span class=\"ds-orbital-label\">2p</span></div><div aria-hidden=\"true\"><span class=\"ds-orbital-box\">↑</span><span class=\"ds-orbital-label\">2p</span></div><div aria-hidden=\"true\"><span class=\"ds-orbital-box\">↑</span><span class=\"ds-orbital-label\">2p</span></div></div><figcaption>Nitrogen orbital occupancy. One box represents one orbital. Equal-energy p orbitals are occupied singly before pairing. This is an occupancy diagram, not an image of electron paths.</figcaption></figure></div>",
+      "css": ".ds-lesson-reading{font-family:var(--reading-font,'STIX Two Text','STIX Two Math',serif);font-size:1.12rem;font-weight:400;line-height:1.8;max-width:75ch;color:var(--ink,#233738)}.ds-lesson-reading h3{font-family:'Source Sans 3',sans-serif;font-size:18px;font-weight:600;line-height:1.4;margin:1.8rem 0 0}.ds-lesson-reading p{margin:0;line-height:1.6}.ds-lesson-figure{margin:1.6rem 0;border-block:1px solid var(--line,#cdd8d6);padding:1.3rem 0}.ds-orbital-diagram{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.65rem;max-width:520px;font-family:'Source Sans 3',sans-serif}.ds-orbital-box{border:1px solid var(--ink,#233738);min-height:60px;display:grid;place-items:center;font-size:26px}.ds-orbital-label{display:block;text-align:center;font-size:16px;margin-top:.4rem}.ds-lesson-figure figcaption{margin-top:.7rem;color:var(--muted,#586b6c);font-family:'Source Sans 3',sans-serif;font-size:.88rem;line-height:1.5}@media(max-width:700px){.ds-lesson-reading{font-size:1.03rem}}"
+    },
+    {
       "name": "Molecular Structure Viewer",
       "kind": "custom",
       "refersTo": "structure-viewer",
@@ -147,21 +158,24 @@
   ],
   "narrative": {
     "northStar": "Scientific Workspace",
-    "overview": "CarbonCanvas uses the user's selected scientific workspace: mineral grey ground, paper reading surfaces, a petrol navigation rail, and copper details. The atmosphere is calm and precise. A single humanist sans serif carries headings, explanatory text, and compact controls, while molecular figures provide the visual subject.\n\nThe implementation balances generous panel padding with compact reference rows. Soft downward shadows distinguish the active reading and molecular work areas; fine borders organize modules, sources, and facts. The same material relationships continue in night mode, with a deliberately light molecular drawing canvas.",
+    "overview": "CarbonCanvas uses the user's selected scientific workspace: mineral grey ground, paper reading surfaces, a petrol navigation rail, and copper details. The atmosphere is calm and precise. Source Sans 3 carries headings and compact controls; STIX Two Text gives long-form lessons a distinct reading voice, with mathematical typesetting for authored chemistry. Molecular figures and labeled scientific schematics provide the visual subject.\n\nThe implementation balances generous panel padding with compact reference rows. Soft downward shadows distinguish the active reading and molecular work areas; fine borders organize modules, sources, and facts. The same material relationships continue in night mode, with a deliberately light molecular drawing canvas.",
     "keyCharacteristics": [
       "Mineral ground, paper surfaces, petrol anchors, and copper details.",
-      "Source Sans 3 throughout the interface.",
+      "Source Sans 3 headings and controls paired with STIX Two Text lessons and typeset chemistry.",
       "Soft elevation for work areas and fine borders for reference rows.",
       "Compact controls with gently curved corners.",
       "Molecular figures accompanied by provenance, graph checks, and separate geometry facts."
     ],
     "rules": [
       { "name": "The Evidence Label Rule", "body": "Preserve the written provenance and assessment labels alongside their color treatment. Green appears on several kinds of content and does not by itself signify factual verification.", "section": "colors" },
+      { "name": "The Scientific Reading Rule", "body": "Use STIX Two Text for long-form lessons and Source Sans 3 for headings, controls, figure labels, and captions. Render explicitly delimited authored chemistry with KaTeX and mhchem, retaining HTML and MathML; original PDF pages keep their own document typography.", "section": "typography" },
       { "name": "The Work Area Rule", "body": "Use the shared shadow for the reading or tool surface that holds the task; use tonal surfaces and separators for its reference rows and supporting information.", "section": "elevation" }
     ],
     "dos": [
       "Do use the implemented mineral, paper, petrol, and copper roles consistently.",
-      "Do preserve Source Sans 3 and the existing semibold heading and control hierarchy.",
+      "Do preserve Source Sans 3 headings and controls, STIX Two Text lessons, and the existing semibold hierarchy.",
+      "Do typeset authored chemistry with KaTeX and mhchem, retaining accessible MathML alongside HTML.",
+      "Do label scientific schematics and preserve the original typography and figures within PDF pages.",
       "Do keep written provenance, assessment, and source labels adjacent to scientific content.",
       "Do preserve the fixed light structure canvas when the surrounding workspace uses night mode.",
       "Do carry the copper keyboard-focus outline and visible loading, error, and disabled states into related controls.",

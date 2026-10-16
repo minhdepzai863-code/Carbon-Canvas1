@@ -16,8 +16,8 @@ export function loadConfig(env = process.env) {
     SMTP_URL: z.string().url(),
     GEMINI_API_KEY: z.string().min(20).optional(),
     GEMINI_MODEL: z
-      .enum(["gemini-3.8-flash", "gemini-3.5-flash-lite"])
-      .default("gemini-3.8-flash"),
+      .enum(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
+      .default("gemini-3.6-flash"),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(5),
     DATABASE_SSL: z.enum(["true", "false"]).default("true"),
     DATABASE_CA_FILE: z.string().optional(),

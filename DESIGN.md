@@ -63,6 +63,16 @@ typography:
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.6
+  lesson-reading:
+    fontFamily: '"STIX Two Text", "STIX Two Math", serif'
+    fontSize: "1.12rem"
+    fontWeight: 400
+    lineHeight: 1.8
+  lesson-reading-mobile:
+    fontFamily: '"STIX Two Text", "STIX Two Math", serif'
+    fontSize: "1.03rem"
+    fontWeight: 400
+    lineHeight: 1.8
   label:
     fontFamily: '"Source Sans 3", "Segoe UI", sans-serif'
     fontSize: "14px"
@@ -164,6 +174,8 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.surface}"
     padding: "30px 34px"
+  lesson-reading:
+    typography: "{typography.lesson-reading}"
   structure-viewer:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -180,14 +192,14 @@ components:
 
 **Creative North Star: "Scientific Workspace"**
 
-CarbonCanvas uses the user's selected scientific workspace: mineral grey ground, paper reading surfaces, a petrol navigation rail, and copper details. The atmosphere is calm and precise. A single humanist sans serif carries headings, explanatory text, and compact controls, while molecular figures provide the visual subject.
+CarbonCanvas uses the user's selected scientific workspace: mineral grey ground, paper reading surfaces, a petrol navigation rail, and copper details. The atmosphere is calm and precise. Source Sans 3 carries headings and compact controls; STIX Two Text gives long-form lessons a distinct reading voice, with mathematical typesetting for authored chemistry. Molecular figures and labeled scientific schematics provide the visual subject.
 
 The implementation balances generous panel padding with compact reference rows. Soft downward shadows distinguish the active reading and molecular work areas; fine borders organize modules, sources, and facts. The same material relationships continue in night mode, with a deliberately light molecular drawing canvas.
 
 **Key Characteristics:**
 
 - Mineral ground, paper surfaces, petrol anchors, and copper details.
-- Source Sans 3 throughout the interface.
+- Source Sans 3 headings and controls paired with STIX Two Text lessons and typeset chemistry.
 - Soft elevation for work areas and fine borders for reference rows.
 - Compact controls with gently curved corners.
 - Molecular figures accompanied by provenance, graph checks, and separate geometry facts.
@@ -228,7 +240,9 @@ Night mode overrides ground, paper, raised, ink, muted, line, selected, accent, 
 
 **Display Font / Body Font:** Source Sans 3, with Segoe UI and sans-serif fallbacks. The project imports weights (400, 500, 600, 700); the common hierarchy uses regular and semibold.
 
-The type is readable and unembellished. Page headings use a slightly tightened measure; descriptive paragraphs retain an open line height. Labels and secondary facts remain in sentence case. Scientific notation uses the native code face inside the structure disclosure.
+**Lesson Reading Font:** self-hosted STIX Two Text, with STIX Two Math and serif fallbacks. Text weights (400, 600) and the math face (400) are imported alongside the control family.
+
+The pairing distinguishes sustained reading from navigation and actions. Page headings use a slightly tightened measure; descriptive paragraphs retain an open line height. Labels, lesson headings, figure labels, and captions remain in Source Sans 3 and sentence case. SMILES uses the native code face inside the structure disclosure; authored formulas and equations use KaTeX with mhchem.
 
 ### Hierarchy
 
@@ -236,8 +250,11 @@ The type is readable and unembellished. Page headings use a slightly tightened m
 - **Headline:** general section headings, semibold. The current-study heading uses its own observed larger scale (`clamp(26px, 3vw, 37px)`, line height `1.17`, maximum `20ch`), becoming `32px` below the mobile breakpoint.
 - **Title:** subsection headings, semibold. Article headings are `31px` on desktop and `27px` on mobile.
 - **Body:** explanatory paragraphs commonly use the frontmatter body role. Lesson concepts use `15px`; source-oriented article copy is limited to `68ch`. Chat text may reach `75ch`.
+- **Lesson Reading:** the long-form lesson wrapper uses the separate reading role with maximum measure (`75ch`); it switches to the mobile reading role at `700px`. Paragraphs retain the global body line height (`1.6`), while lesson lists inherit the reading wrapper's line height. Lesson subsection headings keep the sans-serif title scale with line height (`1.4`).
 - **Label / Button:** semibold control text; navigation uses `15px`, reducing to `14px` below the compact-desktop breakpoint.
 - **Tag / Fine Print:** compact provenance, sources, captions, and caveats. Scientific numeric facts use tabular numerals; geometry angles use `27px`, line height `1.3`.
+
+**The Scientific Reading Rule.** Use STIX Two Text for long-form lessons and Source Sans 3 for headings, controls, figure labels, and captions. Render explicitly delimited authored chemistry with KaTeX and mhchem, retaining HTML and MathML; original PDF pages keep their own document typography.
 
 ## Layout
 
@@ -248,6 +265,8 @@ The overview uses an asymmetric two-column grid (`1.16fr 1fr`, gap `24px`; `1.18
 At or below `1180px`, the rail becomes `202px`; the reading browser becomes `220px`, and the lab's proportion and gutters tighten. At or below `960px`, reading, lab, reaction, and practice split layouts become one column. The module chooser becomes a horizontal strip of `170px` items. The reaction form places reactants side by side and conditions across four columns.
 
 At or below `760px`, the rail is an off-canvas drawer (`236px`) with a scrim; the workspace loses its rail margin. The top bar becomes `62px`, and main padding becomes `27px 20px 20px`. The overview and lower workspace stack. The reference preview keeps a compact two-column figure/caption arrangement. Input-action groups wrap and give the field and main action full width. Reaction conditions return to two columns. The browser body minimum is `320px`.
+
+Long-form lessons keep a bounded reading measure within the existing article. At or below `700px`, their type size reduces and reading tabs wrap. Worked examples use raised mineral with desktop inset (`1rem 1.5rem`), reducing to (`0.8rem 1rem`) at the same breakpoint. Figures remain inline with the lesson between fine mineral rules.
 
 ## Elevation & Depth
 
@@ -290,6 +309,14 @@ Fields use paper, ink, a thin mineral stroke, the field radius, and `11px 13px` 
 
 The fixed petrol rail uses pale sentence-case rows, `43px` minimum height, a control radius, and `10px 12px` padding. Hover lightens the petrol and switches text to white. The active row uses a pale mineral fill, petrol semibold text, a green icon, and `aria-current="page"`. Its palette persists in night mode. Mobile converts the same rail into a sliding drawer with visible open/close controls and a scrim. Closed mobile navigation is hidden. Reading tabs use a separate fine-line treatment with a copper active underline.
 
+### Lesson Reading and Scientific Figures
+
+Long-form prose and worked examples use the reading family inside the existing paper article. Worked examples use a raised mineral inset and a fine rule above the answer. Inline chemical notation is scaled (`1.05em`) to its surrounding text. Only explicitly delimited authored TeX is rendered; ordinary text stays escaped, and KaTeX uses `trust: false` with HTML and MathML output.
+
+Scientific figures use fine top and bottom rules with vertical padding (`1.3rem`) and muted sans-serif captions (`0.88rem`, line height `1.5`). Energy profiles are responsive inline SVGs with ink axes, labeled copper and dashed green paths, and a caption that identifies the profile as schematic. Orbital occupancy uses a five-column HTML grid, bordered boxes, and an accessible configuration label; its caption explains that boxes represent orbitals rather than electron paths. Concept flows explain relationships with text and directional marks. These figures encode teaching relationships, not decorative art or fabricated measured geometry.
+
+Original exam pages are rendered to a fixed white canvas by the local PDF reader. Preserve their document fonts, question diagrams, and equations; the lesson reading font applies to authored teaching content rather than the PDF page.
+
 ### Molecular Structure Viewer
 
 The signature workbench is a rounded paper surface with shared elevation. A wrapping toolbar has `12px 16px` padding and a bottom rule; it exposes the hydrogen toggle, zoom, reset, SVG export, and optional structure edit. The fixed white stage centers a responsive RDKit SVG (`385px` high; `330px` on mobile, `275px` within reaction results). A thin ruled footer explains implicit atoms and states that the drawing is a 2D projection.
@@ -305,7 +332,9 @@ Reduced-motion preference shortens all transitions and animations to `0.01ms` an
 ### Do:
 
 - Do use the implemented mineral, paper, petrol, and copper roles consistently.
-- Do preserve Source Sans 3 and the existing semibold heading and control hierarchy.
+- Do preserve Source Sans 3 headings and controls, STIX Two Text lessons, and the existing semibold hierarchy.
+- Do typeset authored chemistry with KaTeX and mhchem, retaining accessible MathML alongside HTML.
+- Do label scientific schematics and preserve the original typography and figures within PDF pages.
 - Do keep written provenance, assessment, and source labels adjacent to scientific content.
 - Do preserve the fixed light structure canvas when the surrounding workspace uses night mode.
 - Do carry the copper keyboard-focus outline and visible loading, error, and disabled states into related controls.

@@ -124,24 +124,22 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
         <span className="tag">{COMPONENT_NAMES[paper.component[0]]}</span>
       </div>
       <p className="fine-print">
-        Original source-hosted paper, not AI-generated. Diagrams and question
-        numbering stay in their original PDF layout.
+        Original paper, not AI-generated. Diagrams and question numbering stay
+        in their original PDF layout.
       </p>
       <div className="study-actions">
         <a
           className="button secondary"
-          href={`https://pastpapers.papacambridge.com/download_file.php?files=${encodeURIComponent(paper.paperUrl)}`}
-          target="_blank"
-          rel="noreferrer"
+          href={`/api/papers/${paper.id}/document?kind=question&download=1`}
+          download={paper.filename}
         >
           Download question PDF <ExternalLink size={14} />
         </a>
         {paper.markschemeUrl && (
           <a
             className="button secondary"
-            href={`https://pastpapers.papacambridge.com/download_file.php?files=${encodeURIComponent(paper.markschemeUrl)}`}
-            target="_blank"
-            rel="noreferrer"
+            href={`/api/papers/${paper.id}/document?kind=markscheme&download=1`}
+            download={paper.filename.replace("_qp_", "_ms_")}
           >
             Download markscheme PDF <ExternalLink size={14} />
           </a>
@@ -167,8 +165,9 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
         )}
       </div>
       <p className="fine-print">
-        If the embedded PDF is unavailable on your device, use Open question
-        paper above. The source host may change availability.
+        The checked PDF opens below and is retained on this device. If the
+        source is unavailable, use the original links or select a downloaded
+        copy.
       </p>
       <LocalPaperReader
         key={pdfUrl}
@@ -176,6 +175,7 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
           showScheme ? paper.filename.replace("_qp_", "_ms_") : paper.filename
         }
         sha256={showScheme ? paper.markschemeSha256 : paper.sha256}
+        documentUrl={`/api/papers/${paper.id}/document?kind=${showScheme ? "markscheme" : "question"}`}
         firstPage={showScheme ? 1 : 2}
         onLoaded={localReady}
         onInk={
@@ -469,6 +469,7 @@ function PaperAttempt({ paper }: { paper: PastPaper }) {
 }
 
 export default function PastPaperPractice() {
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [format, setFormat] = useState<PaperFormat>(() => {
     try {
       return (
@@ -521,99 +522,114 @@ export default function PastPaperPractice() {
       <aside className="practice-context paper-context">
         <h2>Cambridge 9701 past papers</h2>
         <p>2018–2026 · {PAST_PAPERS.length} question papers</p>
-        <label>
-          Question format
-          <select
-            aria-label="Question format"
-            value={format}
-            onChange={(e) => {
-              setFormat(e.target.value as PaperFormat);
-              setComponent("all");
-            }}
-          >
-            <option value="mcq">Multiple choice — Paper 1</option>
-            <option value="frq">Free response — Papers 2–5</option>
-          </select>
-        </label>
-        <label>
-          Year
-          <select
-            aria-label="Paper year"
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-          >
-            <option value="all">All years</option>
-            {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Exam session
-          <select
-            aria-label="Exam session"
-            value={session}
-            onChange={(e) => setSession(e.target.value)}
-          >
-            <option value="all">All sessions</option>
-            {Object.entries(SESSION_NAMES)
-              .filter(([value]) => availableSessions.has(value))
-              .map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-          </select>
-        </label>
-        {format === "frq" && (
+        <button
+          className="button secondary paper-filter-toggle"
+          aria-expanded={filtersOpen}
+          aria-controls="paper-filter-fields"
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          {filtersOpen ? "Hide filters" : "Change paper"}
+        </button>
+        <div
+          id="paper-filter-fields"
+          className={`paper-filter-fields${filtersOpen ? " is-open" : ""}`}
+        >
           <label>
-            Paper type
+            Question format
             <select
-              aria-label="Paper type"
-              value={component}
-              onChange={(e) => setComponent(e.target.value)}
+              aria-label="Question format"
+              value={format}
+              onChange={(e) => {
+                setFormat(e.target.value as PaperFormat);
+                setComponent("all");
+              }}
             >
-              <option value="all">All free-response papers</option>
-              {["2", "3", "4", "5"].map((c) => (
-                <option key={c} value={c}>
-                  Paper {c} — {COMPONENT_NAMES[c]}
+              <option value="mcq">Multiple choice — Paper 1</option>
+              <option value="frq">Free response — Papers 2–5</option>
+            </select>
+          </label>
+          <label>
+            Year
+            <select
+              aria-label="Paper year"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+            >
+              <option value="all">All years</option>
+              {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018].map(
+                (y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
+            Exam session
+            <select
+              aria-label="Exam session"
+              value={session}
+              onChange={(e) => setSession(e.target.value)}
+            >
+              <option value="all">All sessions</option>
+              {Object.entries(SESSION_NAMES)
+                .filter(([value]) => availableSessions.has(value))
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {format === "frq" && (
+            <label>
+              Paper type
+              <select
+                aria-label="Paper type"
+                value={component}
+                onChange={(e) => setComponent(e.target.value)}
+              >
+                <option value="all">All free-response papers</option>
+                {["2", "3", "4", "5"].map((c) => (
+                  <option key={c} value={c}>
+                    Paper {c} — {COMPONENT_NAMES[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Paper and variant
+            <select
+              aria-label="Paper and variant"
+              value={paper?.id || ""}
+              onChange={(e) => setPaperId(e.target.value)}
+              disabled={!filtered.length}
+            >
+              {!filtered.length && (
+                <option value="">No papers in this selection</option>
+              )}
+              {filtered.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {paperLabel(p)}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        <label>
-          Paper and variant
-          <select
-            aria-label="Paper and variant"
-            value={paper?.id || ""}
-            onChange={(e) => setPaperId(e.target.value)}
-            disabled={!filtered.length}
+          <p className="fine-print">
+            {filtered.length} matching papers. No October/November 2026 papers
+            were listed. Older papers may assess retired syllabus content. This
+            is a third-party archive, not an exam-board-endorsed bank.
+          </p>
+          <a
+            href="https://pastpapers.papacambridge.com/papers/caie/as-and-a-level-chemistry-9701"
+            target="_blank"
+            rel="noreferrer"
           >
-            {!filtered.length && (
-              <option value="">No papers in this selection</option>
-            )}
-            {filtered.map((p) => (
-              <option key={p.id} value={p.id}>
-                {paperLabel(p)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="fine-print">
-          {filtered.length} matching papers. No October/November 2026 papers
-          were listed. Older papers may assess retired syllabus content. This is
-          a third-party archive, not an exam-board-endorsed bank.
-        </p>
-        <a
-          href="https://pastpapers.papacambridge.com/papers/caie/as-and-a-level-chemistry-9701"
-          target="_blank"
-          rel="noreferrer"
-        >
-          PapaCambridge source archive
-        </a>
+            PapaCambridge source archive
+          </a>
+        </div>
       </aside>
       {paper ? (
         <PaperAttempt key={paper.id} paper={paper} />

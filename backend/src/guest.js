@@ -9,6 +9,7 @@ import {
 import { isIP } from "node:net";
 import { z } from "zod";
 import { AIError, installAIRoutes } from "./ai.js";
+import { installDocumentRoutes } from "./documents.js";
 
 export function loadGuestConfig(env = process.env) {
   const config = z
@@ -19,8 +20,8 @@ export function loadGuestConfig(env = process.env) {
       PORT: z.coerce.number().int().min(0).max(65535).default(3001),
       GEMINI_API_KEY: z.string().min(20),
       GEMINI_MODEL: z
-        .enum(["gemini-3.8-flash", "gemini-3.5-flash-lite"])
-        .default("gemini-3.8-flash"),
+        .enum(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
+        .default("gemini-3.6-flash"),
       FRONTEND_ORIGIN: z.string().url().optional(),
       VERCEL: z.string().optional(),
       VERCEL_URL: z.string().optional(),
@@ -98,7 +99,32 @@ export function deviceCookie(config, raw, now = Date.now()) {
     fresh: true,
   };
 }
-export function guestRules(config, id, ip) {
+export function guestRules(config, id, ip, purpose = "ai") {
+  if (purpose === "documents")
+    return [
+      {
+        key: hmac(config, "paper-device-burst", id),
+        window_seconds: 300,
+        maximum: 30,
+      },
+      {
+        key: hmac(config, "paper-device-day", id),
+        window_seconds: 86400,
+        maximum: 100,
+      },
+      {
+        key: hmac(config, "paper-ip-day", ip),
+        window_seconds: 86400,
+        maximum: 300,
+      },
+      {
+        key: createHash("sha256")
+          .update("carboncanvas1/guest-document-budget/v1")
+          .digest("hex"),
+        window_seconds: 86400,
+        maximum: 500,
+      },
+    ];
   const rule = (domain, text, window_seconds, maximum) => ({
     key: hmac(config, domain, text),
     window_seconds,
@@ -189,7 +215,7 @@ export function createGuestApp(config, { checkQuota, ...aiDependencies } = {}) {
     }
     return { allowed: true, retryAfter: null };
   };
-  const enforceQuota = async (req, res, next) => {
+  const enforceBudget = (purpose) => async (req, res, next) => {
     const raw = (req.headers.cookie || "")
       .split(";")
       .map((s) => s.trim())
@@ -210,7 +236,7 @@ export function createGuestApp(config, { checkQuota, ...aiDependencies } = {}) {
       typeof forwarded === "string" && isIP(forwarded)
         ? forwarded
         : req.socket.remoteAddress || "unknown";
-    const rules = guestRules(config, device.id, ip);
+    const rules = guestRules(config, device.id, ip, purpose);
     const allowed = await (
       checkQuota ||
       (config.NODE_ENV !== "production" && config.CC_DEV_MEMORY_QUOTA === "true"
@@ -222,17 +248,24 @@ export function createGuestApp(config, { checkQuota, ...aiDependencies } = {}) {
         .set("Retry-After", String(allowed.retryAfter))
         .status(429)
         .json({
-          code: "AI_RATE_LIMITED",
+          code: purpose === "ai" ? "AI_RATE_LIMITED" : "DOCUMENT_RATE_LIMITED",
           error:
-            "The guest testing AI allowance is reached. Try again later; your work is saved on this device.",
+            purpose === "ai"
+              ? "The guest testing AI allowance is reached. Try again later; your work is saved on this device."
+              : "The paper download allowance is reached. Use a retained PDF or the original source link; your saved answers and ink are unchanged.",
         });
     res.locals.userId = device.id;
     next();
   };
+  installDocumentRoutes(
+    app,
+    enforceBudget("documents"),
+    aiDependencies.fetchPdf,
+  );
   installAIRoutes(app, {
     config,
     jsonParser: express.json({ limit: "3mb", strict: true }),
-    quotaOverride: enforceQuota,
+    quotaOverride: enforceBudget("ai"),
     persistAssessments: false,
     ...aiDependencies,
   });
